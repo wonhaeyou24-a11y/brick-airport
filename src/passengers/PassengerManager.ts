@@ -117,11 +117,13 @@ export class PassengerManager {
     count: number,
   ): void {
     const base = this.waypoints.terminalEntrance;
+    const flightId = this.state.getAircraft(aircraftId)?.currentFlightId ?? null;
     for (let i = 0; i < count; i++) {
       const spread = (i - (count - 1) / 2) * 0.6;
+      const id = this.mkId();
       this.state.addPassenger({
-        id: this.mkId(),
-        flightId: aircraftId,
+        id,
+        flightId,
         aircraftId,
         gateId,
         state: "WAITING",
@@ -132,6 +134,7 @@ export class PassengerManager {
         colorIndex: i,
         revenueProcessed: false,
       });
+      if (flightId) this.state.addFlightPassenger(flightId, id);
     }
   }
 
@@ -142,15 +145,17 @@ export class PassengerManager {
 
     const count = 3 + (this.arrivalCounter++ % 3); // 3–5
     const bp = boardingPoint(gate.parkPosition);
+    const flightId = ac.currentFlightId ?? null;
     for (let i = 0; i < count; i++) {
       const jitter: Vec3 = {
         x: bp.x + (i % 2) * 0.5,
         y: 0,
         z: bp.z - Math.floor(i / 2) * 0.5,
       };
+      const id = this.mkId();
       this.state.addPassenger({
-        id: this.mkId(),
-        flightId: aircraftId,
+        id,
+        flightId,
         aircraftId,
         gateId: gate.id,
         state: "DISEMBARKING",
@@ -161,6 +166,7 @@ export class PassengerManager {
         colorIndex: i + 2,
         revenueProcessed: false,
       });
+      if (flightId) this.state.addFlightPassenger(flightId, id);
     }
   }
 

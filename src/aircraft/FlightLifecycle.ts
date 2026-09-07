@@ -2,6 +2,7 @@ import type {
   AircraftState,
   FlightRouteType,
   FlightState,
+  GameStateData,
 } from "../core/GameState";
 import { isFlightOver } from "../core/GameState";
 
@@ -121,4 +122,50 @@ export function canComplete(current: FlightState, snap: FlightSnapshot): boolean
     snap.aircraftState === "FLYING" ||
     flightStateRank(current) >= flightStateRank("FLYING")
   );
+}
+
+/**
+ * Dev-only consistency check (spec V0.6-C, optional). Pure: walks the state and
+ * returns a list of relation problems. Empty array === healthy. Never throws,
+ * never mutates — safe to call from the console.
+ */
+export function validateFlightRelations(data: GameStateData): string[] {
+  const problems: string[] = [];
+  const aircraftIds = new Set(data.aircraft.map((a) => a.id));
+  const gateIds = new Set(data.gates.map((g) => g.id));
+  const flightIds = new Set(data.flights.map((f) => f.id));
+  const passengerById = new Map(data.passengers.map((p) => [p.id, p]));
+
+  for (const f of data.flights) {
+    if (!isFlightOver(f.state) && f.aircraftId && !aircraftIds.has(f.aircraftId)) {
+      problems.push(`flight ${f.id}: active but aircraft ${f.aircraftId} is gone`);
+    }
+    if (f.gateId && !gateIds.has(f.gateId)) {
+      problems.push(`flight ${f.id}: gate ${f.gateId} does not exist`);
+    }
+    for (const pid of f.passengerIds) {
+      const p = passengerById.get(pid);
+      if (p && p.flightId !== f.id) {
+        problems.push(
+          `flight ${f.id}: passenger ${pid} points at flight ${p.flightId ?? "—"}`,
+        );
+      }
+    }
+  }
+
+  for (const p of data.passengers) {
+    if (p.flightId && !flightIds.has(p.flightId)) {
+      problems.push(`passenger ${p.id}: flight ${p.flightId} does not exist`);
+    }
+  }
+
+  for (const a of data.aircraft) {
+    if (a.currentFlightId && !flightIds.has(a.currentFlightId)) {
+      problems.push(
+        `aircraft ${a.id}: currentFlightId ${a.currentFlightId} does not exist`,
+      );
+    }
+  }
+
+  return problems;
 }

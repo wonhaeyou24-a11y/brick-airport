@@ -1,22 +1,43 @@
-import type { AircraftData, AircraftState, GameState } from "../core/GameState";
+import type {
+  AircraftData,
+  AircraftState,
+  FlightData,
+  GameState,
+} from "../core/GameState";
+import { isFlightOver } from "../core/GameState";
+import { ECONOMY_CONFIG } from "../economy/EconomyConfig";
 import { FLIGHT_CONFIG } from "./FlightConfig";
+import {
+  canComplete,
+  deriveFlightState,
+  type FlightSnapshot,
+} from "./FlightLifecycle";
 
 /**
  * FlightScheduler — keeps the airport alive by requesting new arrivals over
- * time, and counts flight departures.
+ * time, and owns the Flight (항공편) lifecycle (V0.6-C).
  *
  * Pure logic: reads / writes GameState only, never a Three.js object. Actual
  * Aircraft mesh + route creation is delegated to the `spawnAircraft` hook
  * (AircraftManager.spawn), which is where the graphics live (spec §29).
  *
  * Flow per request:
- *   timer fires -> a gate is free & under the cap -> reserve gate, create
- *   AircraftData (state LANDING at the arrival point), hand it to the hook.
- *   No gate -> queue the request (bounded); retried when a gate frees.
+ *   timer fires -> a gate is free & under the cap -> create a Flight FIRST,
+ *   then reserve the gate, create AircraftData (state LANDING at the arrival
+ *   point) linked to that flight, and hand it to the hook. No gate -> queue
+ *   the request (bounded); retried when a gate frees.
  *
- * totalFlights: incremented exactly once per departure via a prev-state map
- * (prev !== TAKEOFF && cur === TAKEOFF), same one-shot pattern PassengerManager
- * uses for aircraft events (spec §18, §19).
+ * Each frame syncFlights() then:
+ *   - opens a fresh DEPARTURE flight for any serviceable aircraft that has none
+ *     (this is how one aircraft flies many flights over its life);
+ *   - advances every active flight's state via FlightLifecycle.deriveFlightState;
+ *   - attributes ticket revenue to the flight (peak of its boarded pax — never
+ *     re-added to airport totals, so no double revenue);
+ *   - marks a flight COMPLETED once its aircraft is airborne and outbound.
+ *
+ * totalFlights: still incremented exactly once per departure via a prev-state
+ * map (prev !== TAKEOFF && cur === TAKEOFF), same one-shot pattern
+ * PassengerManager uses for aircraft events (spec §18, §19).
  */
 export interface FlightSchedulerHooks {
   spawnAircraft(data: AircraftData): void;
@@ -26,6 +47,9 @@ export class FlightScheduler {
   private timer: number = FLIGHT_CONFIG.initialSpawnDelay;
   private pending = 0;
   private readonly prevState = new Map<string, AircraftState>();
+  /** Flight ids whose aircraft has begun its takeoff roll at least once. */
+  private readonly departed = new Set<string>();
+  private destinationIndex = 0;
 
   constructor(
     private readonly state: GameState,
@@ -50,6 +74,8 @@ export class FlightScheduler {
     while (this.pending > 0 && guard-- > 0 && this.tryDispatch()) {
       this.pending -= 1;
     }
+
+    this.syncFlights();
   }
 
   /** Manual request (e.g. a future "call a flight" button). */
@@ -84,6 +110,9 @@ export class FlightScheduler {
     const id = this.state.nextAircraftId();
     const num = Number(/(\d+)$/.exec(id)?.[1] ?? 0);
 
+    // Flight FIRST (spec V0.6-C), then the aircraft that will operate it.
+    const flight = this.createFlight(gate.id, id);
+
     // Reserve the gate up front so nothing else claims it during approach.
     this.state.occupyGate(gate.id, id);
 
@@ -97,10 +126,93 @@ export class FlightScheduler {
       targetPosition: null,
       homeGateId: gate.id,
       capacity: FLIGHT_CONFIG.defaultCapacity,
+      currentFlightId: flight.id,
     };
     this.state.addAircraft(data);
     this.hooks.spawnAircraft(data);
     return true;
+  }
+
+  /** Open a new SCHEDULED departure flight. */
+  private createFlight(gateId: string | null, aircraftId: string | null): FlightData {
+    const now = Date.now();
+    const list = FLIGHT_CONFIG.destinations;
+    const destination = list[this.destinationIndex++ % list.length];
+    const flight: FlightData = {
+      id: this.state.nextFlightId(),
+      aircraftId,
+      gateId,
+      state: "SCHEDULED",
+      routeType: "DEPARTURE",
+      origin: FLIGHT_CONFIG.homeCity,
+      destination,
+      scheduledAt: now,
+      createdAt: now,
+      passengerIds: [],
+    };
+    this.state.addFlight(flight);
+    return flight;
+  }
+
+  /**
+   * Per-frame Flight lifecycle: assign flights to aircraft that need one,
+   * advance flight states, attribute revenue, complete finished flights.
+   */
+  private syncFlights(): void {
+    // 1. Every serviceable aircraft gets a current flight (reuse over its life).
+    for (const ac of this.state.data.aircraft) {
+      const current = ac.currentFlightId
+        ? this.state.getFlight(ac.currentFlightId)
+        : undefined;
+      if (current && !isFlightOver(current.state)) continue;
+      const atGate =
+        (ac.state === "PARKED" ||
+          ac.state === "LANDING" ||
+          ac.state === "TAXIING") &&
+        ac.homeGateId !== null;
+      if (atGate) {
+        ac.currentFlightId = this.createFlight(ac.homeGateId, ac.id).id;
+      }
+    }
+
+    // 2. Advance / complete each active flight.
+    for (const flight of this.state.data.flights) {
+      if (isFlightOver(flight.state)) continue;
+
+      const ac = flight.aircraftId
+        ? this.state.getAircraft(flight.aircraftId)
+        : undefined;
+      const board = flight.aircraftId
+        ? this.state.getAircraftBoarding(flight.aircraftId)
+        : { total: 0, boarded: 0 };
+
+      // Revenue attribution: peak count of this flight's paid departure pax,
+      // so the value survives the passengers being removed on pushback. Never
+      // re-added to airport totals — Economy already did that (no double pay).
+      if (ac) {
+        const paid = this.state
+          .getPassengersForAircraft(ac.id, "DEPARTURE")
+          .filter((p) => p.revenueProcessed).length;
+        const revenue = paid * ECONOMY_CONFIG.ticketRevenuePerPassenger;
+        if (revenue > (flight.revenue ?? 0)) flight.revenue = revenue;
+      }
+
+      const snap: FlightSnapshot = {
+        routeType: flight.routeType,
+        aircraftState: ac?.state ?? null,
+        boarded: board.boarded,
+        total: board.total,
+        departed: this.departed.has(flight.id),
+      };
+
+      const next = deriveFlightState(flight.state, snap);
+      if (next !== flight.state) flight.state = next;
+
+      if (canComplete(flight.state, snap)) {
+        this.state.completeFlight(flight.id, flight.revenue ?? 0);
+        this.departed.delete(flight.id);
+      }
+    }
   }
 
   private countDepartures(): void {
@@ -108,6 +220,7 @@ export class FlightScheduler {
       const prev = this.prevState.get(ac.id);
       if (prev !== undefined && prev !== "TAKEOFF" && ac.state === "TAKEOFF") {
         this.state.recordFlightDeparture();
+        if (ac.currentFlightId) this.departed.add(ac.currentFlightId);
       }
       this.prevState.set(ac.id, ac.state);
     }

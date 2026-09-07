@@ -577,6 +577,15 @@ export class GameState {
     );
   }
 
+  /** Link a passenger to a flight (both directions stay consistent). No-op if unknown / dup. */
+  addFlightPassenger(flightId: string, passengerId: string): void {
+    const flight = this.getFlight(flightId);
+    if (!flight) return;
+    if (!flight.passengerIds.includes(passengerId)) {
+      flight.passengerIds.push(passengerId);
+    }
+  }
+
   /** Shallow-merge a patch into a flight. No-op if the id is unknown. */
   updateFlight(id: string, patch: Partial<FlightData>): void {
     const flight = this.getFlight(id);

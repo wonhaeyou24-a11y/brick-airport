@@ -24,4 +24,16 @@ export const FLIGHT_CONFIG = {
   defaultCapacity: 6,
   /** Where a new arrival appears (out past the approach, airborne). */
   arrivalSpawn: { x: 56, y: 12, z: 14 } as Vec3,
+  /** Home city shown as the origin of every departure flight (V0.6-C). */
+  homeCity: "SEOUL",
+  /** Destinations a departure flight rotates through (V0.6-C). */
+  destinations: [
+    "TOKYO",
+    "BEIJING",
+    "SINGAPORE",
+    "BANGKOK",
+    "SYDNEY",
+    "DUBAI",
+    "PARIS",
+  ] as readonly string[],
 } as const;
