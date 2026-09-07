@@ -64,8 +64,11 @@ export class HUD {
   private readonly statBalanceEl: HTMLElement;
   private readonly statAvgEl: HTMLElement;
   private readonly statBoardingEl: HTMLElement;
+  private readonly noticeEl: HTMLElement;
 
   private revenueTimer = 0;
+  private noticeTimer = 0;
+  private noticeHideTimer = 0;
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.root = container;
@@ -87,6 +90,7 @@ export class HUD {
     this.statBalanceEl = this.must(".js-stat-balance");
     this.statAvgEl = this.must(".js-stat-avg");
     this.statBoardingEl = this.must(".js-stat-boarding");
+    this.noticeEl = this.must(".js-notice");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -104,17 +108,45 @@ export class HUD {
     this.flightEl.textContent = String(stats.flightCount);
   }
 
-  /** Brief "+$N" pop next to the money stat when ticket revenue lands (§12). */
+  /** Brief "+$N" pop next to the money stat when ticket revenue lands. */
   showRevenue(amount: number): void {
-    this.revenueEl.textContent = `+$${amount.toLocaleString("en-US")}`;
+    this.flashMoney(`+$${amount.toLocaleString("en-US")}`, "gain", 1200);
+  }
+
+  /** Brief "−$N" pop when a building is bought. */
+  showSpend(amount: number): void {
+    this.flashMoney(`−$${amount.toLocaleString("en-US")}`, "spend", 1500);
+  }
+
+  private flashMoney(text: string, kind: "gain" | "spend", ms: number): void {
+    this.revenueEl.textContent = text;
     this.revenueEl.classList.remove("fade");
-    this.revenueEl.style.opacity = "1"; // instant show
+    this.revenueEl.classList.toggle("spend", kind === "spend");
+    this.revenueEl.style.opacity = "1";
 
     window.clearTimeout(this.revenueTimer);
     this.revenueTimer = window.setTimeout(() => {
-      this.revenueEl.classList.add("fade"); // fade out only
+      this.revenueEl.classList.add("fade");
       this.revenueEl.style.opacity = "0";
-    }, 1200);
+    }, ms);
+  }
+
+  /** Temporary centred toast — level-up, "requires level N", "not enough money". */
+  showNotice(text: string, ms = 2600): void {
+    this.noticeEl.textContent = text;
+    this.noticeEl.hidden = false;
+    // Force reflow so the fade-in transition restarts even on a rapid re-show.
+    void this.noticeEl.offsetWidth;
+    this.noticeEl.classList.add("show");
+
+    window.clearTimeout(this.noticeTimer);
+    window.clearTimeout(this.noticeHideTimer);
+    this.noticeTimer = window.setTimeout(() => {
+      this.noticeEl.classList.remove("show");
+      this.noticeHideTimer = window.setTimeout(() => {
+        this.noticeEl.hidden = true;
+      }, 300);
+    }, ms);
   }
 
   /**
@@ -158,6 +190,8 @@ function escapeHtml(text: string): string {
 }
 
 const TEMPLATE = /* html */ `
+  <div class="hud-notice js-notice" hidden></div>
+
   <div class="hud-top">
     <div class="hud-panel hud-title">
       Brick Airport

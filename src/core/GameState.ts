@@ -168,7 +168,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.4.4",
+    version: "0.5.0",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -327,6 +327,17 @@ export class GameState {
   recordFlightDeparture(): void {
     const a = this.data.airport;
     a.totalFlights = (a.totalFlights ?? 0) + 1;
+  }
+
+  /**
+   * Deduct `amount` from the airport balance. Returns false (and changes
+   * nothing) if the balance is too low — the atomic guard for a purchase
+   * (spec §9, §32).
+   */
+  spendMoney(amount: number): boolean {
+    if (this.data.airport.money < amount) return false;
+    this.data.airport.money -= amount;
+    return true;
   }
 
   getBuilding(id: string): BuildingData | undefined {

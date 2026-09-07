@@ -1,6 +1,7 @@
 import type { BuildingData, BuildingType } from "../core/GameState";
 import type { GridOccupancy } from "../world/GridOccupancy";
 import type { CellCoord } from "../world/cells";
+import type { PurchaseResult } from "../buildings/BuildingConfig";
 import { PlacementSystem, type PlacementValidity } from "./PlacementSystem";
 import type { BuildingPreview } from "./BuildingPreview";
 
@@ -8,10 +9,14 @@ import type { BuildingPreview } from "./BuildingPreview";
  * BuildController — the IDLE / PLACEMENT state machine for build mode.
  *
  * Owns its own PlacementSystem (sharing the shared GridOccupancy) so it never
- * fights the rest of the app for placement state. It drives only the preview
- * ghost and reports mode changes; actual GameState / world mutation happens in
- * the `commit` hook (Game.commitBuilding), keeping the "PlacementSystem does
- * not change game state" rule from spec §7.
+ * fights the rest of the app for placement state. Two independent checks gate a
+ * build (spec §5, §31):
+ *   - placement validity  — is the space free?  (PlacementSystem)
+ *   - purchase validity   — affordable / unlocked?  (canPurchase hook)
+ * Both must pass for the preview to read VALID and for confirm to commit.
+ *
+ * Actual GameState / world mutation + money deduction happen in the `commit`
+ * hook (Game.commitBuilding), which re-checks the purchase atomically.
  */
 
 export type BuildMode = "IDLE" | "PLACEMENT";
@@ -21,13 +26,16 @@ export interface BuildModeState {
   type: BuildingType | null;
   cell: CellCoord | null;
   validity: PlacementValidity | null;
+  purchase: PurchaseResult | null;
 }
 
 export interface BuildControllerHooks {
   /** Fresh, collision-free id for a new building of this type. */
   nextId(type: BuildingType): string;
-  /** Commit a validated building to GameState + world + occupancy. */
-  commit(data: BuildingData): void;
+  /** Money / level check for the active type (spec §6). */
+  canPurchase(type: BuildingType): PurchaseResult;
+  /** Commit a validated building: deduct money + add to state/world. */
+  commit(data: BuildingData): boolean;
   /** Called whenever build-mode state changes (for HUD / menu / selection). */
   onModeChange(state: BuildModeState): void;
 }
@@ -38,6 +46,7 @@ export class BuildController {
   private type: BuildingType | null = null;
   private cell: CellCoord | null = null;
   private validity: PlacementValidity | null = null;
+  private purchase: PurchaseResult | null = null;
 
   constructor(
     occupancy: GridOccupancy,
@@ -60,6 +69,7 @@ export class BuildController {
     this.type = type;
     this.cell = null;
     this.validity = null;
+    this.purchase = this.hooks.canPurchase(type);
     this.placement.begin(type);
     this.preview.show(type);
     this.preview.setVisible(false);
@@ -72,6 +82,7 @@ export class BuildController {
     this.type = null;
     this.cell = null;
     this.validity = null;
+    this.purchase = null;
     this.placement.cancel();
     this.preview.hide();
     this.emit();
@@ -79,15 +90,18 @@ export class BuildController {
 
   /** Pointer moved to `cell` (null = off the grid). */
   updateHover(cell: CellCoord | null): void {
-    if (!this.isActive) return;
+    if (!this.isActive || !this.type) return;
+    const type = this.type;
     this.cell = cell;
     this.placement.setPointerCell(cell);
+    this.purchase = this.hooks.canPurchase(type);
 
     const size = this.placement.previewSize;
     if (cell && size) {
       this.validity = this.placement.validate();
+      const canBuild = this.validity.valid && this.purchase.ok;
       this.preview.moveTo(cell, size);
-      this.preview.setValid(this.validity.valid);
+      this.preview.setValid(canBuild);
       this.preview.setVisible(true);
     } else {
       this.validity = null;
@@ -96,25 +110,26 @@ export class BuildController {
     this.emit();
   }
 
-  /** Pointer tapped at `cell` — place the building if the spot is valid. */
+  /** Pointer tapped at `cell` — place the building if space + purchase pass. */
   confirmAt(cell: CellCoord | null): void {
     if (!this.isActive || !this.type || !cell) return;
+    const type = this.type;
 
     this.placement.setPointerCell(cell);
-    const data = this.placement.confirm(this.hooks.nextId(this.type));
-    if (!data) {
-      this.emit();
-      return;
-    }
+    this.purchase = this.hooks.canPurchase(type);
 
-    this.hooks.commit(data);
+    // A valid space still produces BuildingData even if the player can't
+    // afford it — commit() does the final purchase check and shows the
+    // denial toast, so the failure feedback is not swallowed here.
+    const data = this.placement.confirm(this.hooks.nextId(type));
+    if (data) this.hooks.commit(data); // re-checks purchase + deducts atomically
 
     // Stay in placement mode for repeated placement; re-arm and re-validate.
-    const type = this.type;
     this.placement.begin(type);
     this.placement.setPointerCell(cell);
+    this.purchase = this.hooks.canPurchase(type);
     this.validity = this.placement.validate();
-    this.preview.setValid(this.validity.valid);
+    this.preview.setValid(this.validity.valid && this.purchase.ok);
     this.emit();
   }
 
@@ -124,6 +139,7 @@ export class BuildController {
       type: this.type,
       cell: this.cell,
       validity: this.validity,
+      purchase: this.purchase,
     });
   }
 }

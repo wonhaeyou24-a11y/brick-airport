@@ -17,6 +17,14 @@ import {
   BUILDING_FOOTPRINTS,
   type PlacementValidity,
 } from "../construction/PlacementSystem";
+import {
+  BUILDING_CONFIG,
+  BUILDING_TYPES,
+  getBuildingConfig,
+  checkPurchase,
+  type PurchaseResult,
+} from "../buildings/BuildingConfig";
+import { computeAirportLevel } from "../progression/AirportProgression";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { PassengerManager } from "../passengers/PassengerManager";
@@ -26,7 +34,7 @@ import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
 import { HUD, type SelectionInfo } from "../ui/HUD";
-import { BuildMenu } from "../ui/BuildMenu";
+import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
 
 /**
  * Game — top-level composition root.
@@ -65,6 +73,8 @@ export class Game {
   private shownStatsSig = "";
   /** Signature of the Airport Statistics panel. */
   private shownStatisticsSig = "";
+  /** Signature of the BuildMenu availability (level | money bucket). */
+  private shownBuildMenuSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -102,6 +112,8 @@ export class Game {
       this.buildingPreview,
       {
         nextId: (type) => this.state.nextBuildingId(type),
+        canPurchase: (type) =>
+          checkPurchase(type, this.state.airport.money, this.state.airport.level),
         commit: (data) => this.commitBuilding(data),
         onModeChange: (s) => this.onBuildModeChange(s),
       },
@@ -144,9 +156,10 @@ export class Game {
     this.refreshStatistics();
 
     this.buildMenu = new BuildMenu(hudContainer, {
-      onSelectType: (type) => this.buildController.begin(type),
+      onSelectType: (type) => this.onBuildTypeSelected(type),
       onCancel: () => this.buildController.cancel(),
     });
+    this.refreshBuildMenu();
 
     this.loop = new GameLoop(
       (dt) => this.update(dt),
@@ -177,8 +190,8 @@ export class Game {
   }
 
   /**
-   * Direct placement helper (console / tests). The build-mode UI goes through
-   * BuildController instead, which calls commitBuilding() via its commit hook.
+   * Direct placement helper (console / tests) — free, skips the purchase check.
+   * The build-mode UI goes through BuildController -> commitBuilding().
    * Returns false if the footprint is out of bounds or occupied.
    */
   placeBuilding(type: BuildingType, col: number, row: number): boolean {
@@ -195,19 +208,65 @@ export class Game {
         rotationY: 0,
         level: 1,
       }),
+      false,
     );
     return true;
   }
 
   // --------------------------------------------------------------- internals
 
-  /** Single funnel for adding a building to state + world + occupancy. */
-  private commitBuilding(data: BuildingData): void {
+  /**
+   * Single funnel for adding a building. When `charge` (the normal build path),
+   * the purchase is re-checked and the cost deducted atomically before the
+   * building is committed — on any failure nothing changes (spec §8, §9, §32).
+   */
+  private commitBuilding(data: BuildingData, charge = true): boolean {
+    if (charge) {
+      const purchase = checkPurchase(
+        data.type,
+        this.state.airport.money,
+        this.state.airport.level,
+      );
+      if (!purchase.ok) {
+        this.showBuildDenied(purchase);
+        return false;
+      }
+      const cost = getBuildingConfig(data.type).cost;
+      if (!this.state.spendMoney(cost)) {
+        this.showBuildDenied({ ok: false, reason: "INSUFFICIENT_FUNDS", cost });
+        return false;
+      }
+      this.hud.showSpend(cost);
+    }
+
     this.state.data.buildings.push(data);
     this.occupancy.add(data);
     this.world.addBuilding(data);
     if (data.type === "GATE") this.state.addGateForBuilding(data);
     this.refreshHudStats();
+    return true;
+  }
+
+  private onBuildTypeSelected(type: BuildingType): void {
+    const purchase = checkPurchase(
+      type,
+      this.state.airport.money,
+      this.state.airport.level,
+    );
+    if (!purchase.ok && purchase.reason === "LOCKED") {
+      this.hud.showNotice(`Requires Airport Level ${purchase.requiredLevel}`);
+      return;
+    }
+    this.buildController.begin(type);
+  }
+
+  private showBuildDenied(purchase: PurchaseResult): void {
+    if (purchase.ok) return;
+    this.hud.showNotice(
+      purchase.reason === "LOCKED"
+        ? `Requires Airport Level ${purchase.requiredLevel}`
+        : "Not enough money",
+    );
   }
 
   private addLights(): void {
@@ -280,17 +339,13 @@ export class Game {
       this.state.setHoverCell(null);
       this.state.setSelectedCell(null);
 
-      const status = state.cell
-        ? state.validity
-          ? validityText(state.validity)
-          : "—"
-        : "Move over the grid";
+      const cfg = state.type ? getBuildingConfig(state.type) : null;
       this.hud.setSelection({
         title: "BUILD MODE",
         lines: [
-          capitalize(state.type ?? "—"),
+          `${capitalize(state.type ?? "—")}${cfg ? `  $${cfg.cost.toLocaleString("en-US")}` : ""}`,
           state.cell ? `Cell ${state.cell.col}, ${state.cell.row}` : "—",
-          `Status: ${status}`,
+          `Status: ${buildStatusText(state)}`,
         ],
       });
     } else {
@@ -459,15 +514,53 @@ export class Game {
     const revenue = this.economy.settleBoarding();
     if (revenue > 0) this.hud.showRevenue(revenue);
 
+    this.refreshProgression();
     this.refreshSelectionHud();
     this.refreshDynamicStats();
     this.refreshStatistics();
+    this.refreshBuildMenu();
+  }
+
+  /** Bump airport.level when cumulative stats cross a threshold (one-shot). */
+  private refreshProgression(): void {
+    const a = this.state.airport;
+    const target = computeAirportLevel(
+      a.totalFlights ?? 0,
+      a.totalPassengers ?? 0,
+    );
+    if (target <= a.level) return; // only ever rises; write only on change
+    a.level = target;
+    this.hud.showNotice(`Airport Level ${target}! New buildings available.`);
+    this.refreshHudStats();
+  }
+
+  /** Push cost / lock state to the BuildMenu when level or money changes. */
+  private refreshBuildMenu(): void {
+    const { money, level } = this.state.airport;
+    // Bucket by which types are affordable so tiny revenue ticks don't re-render.
+    const affordBucket = BUILDING_TYPES.map((t) =>
+      money >= BUILDING_CONFIG[t].cost ? "1" : "0",
+    ).join("");
+    const sig = `${level}|${affordBucket}`;
+    if (sig === this.shownBuildMenuSig) return;
+    this.shownBuildMenuSig = sig;
+
+    const items: BuildMenuItem[] = BUILDING_TYPES.map((type) => {
+      const cfg = BUILDING_CONFIG[type];
+      return {
+        type,
+        cost: cfg.cost,
+        requiredLevel: cfg.requiredLevel,
+        locked: level < cfg.requiredLevel,
+      };
+    });
+    this.buildMenu.setAvailability(items);
   }
 
   /** Refresh the top HUD stats when a tracked value changes. */
   private refreshDynamicStats(): void {
     const a = this.state.airport;
-    const sig = `${a.money}|${this.passengerManager.count}|${this.aircraftManager.count}|${a.totalFlights ?? 0}`;
+    const sig = `${a.level}|${a.money}|${this.passengerManager.count}|${this.aircraftManager.count}|${a.totalFlights ?? 0}`;
     if (sig === this.shownStatsSig) return;
     this.shownStatsSig = sig;
     this.refreshHudStats();
@@ -543,4 +636,16 @@ function capitalize(text: string): string {
 function validityText(v: PlacementValidity): string {
   if (v.valid) return "VALID";
   return v.reason === "OUT_OF_BOUNDS" ? "INVALID (out of bounds)" : "INVALID (occupied)";
+}
+
+/** Combined placement + purchase status for the BUILD MODE HUD line. */
+function buildStatusText(state: BuildModeState): string {
+  if (state.purchase && !state.purchase.ok) {
+    return state.purchase.reason === "LOCKED"
+      ? `Requires Lv.${state.purchase.requiredLevel}`
+      : "Not enough money";
+  }
+  if (!state.cell) return "Move over the grid";
+  if (state.validity && !state.validity.valid) return validityText(state.validity);
+  return "VALID";
 }

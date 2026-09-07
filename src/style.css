@@ -121,8 +121,38 @@ body {
   opacity: 0;
 }
 
+.hud-revenue.spend {
+  color: var(--brick-red);
+}
+
 .hud-revenue.fade {
   transition: opacity 0.4s ease;
+}
+
+/* --------------------------------------------------------- hud notice --- */
+
+.hud-notice {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translate(-50%, -8px);
+  pointer-events: none;
+  background: var(--brick-yellow);
+  color: var(--panel-text);
+  border: 3px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 8px 16px;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.hud-notice.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .hud-bottom {
@@ -277,12 +307,37 @@ body {
   background: var(--panel-bg);
   color: var(--panel-text);
   font-size: 14px;
-  min-width: 120px;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  line-height: 1.2;
+  padding: 6px 12px;
+}
+
+.build-type .build-label {
+  font-weight: 800;
+}
+
+.build-type .build-cost {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.65;
 }
 
 .build-type.is-selected {
   background: var(--brick-green);
   color: #fff;
+}
+
+.build-type.is-locked {
+  background: #d9dde0;
+  color: #6b7378;
+}
+
+.build-type.is-locked .build-cost {
+  opacity: 0.9;
 }
 
 .build-cancel {
