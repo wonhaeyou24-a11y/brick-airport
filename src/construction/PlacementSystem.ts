@@ -37,7 +37,6 @@ export const BUILDING_FOOTPRINTS: Record<BuildingType, CellSize> = {
 export class PlacementSystem {
   private activeType: BuildingType | null = null;
   private pointerCell: CellCoord | null = null;
-  private nextId = 1;
 
   constructor(private readonly occupancy: GridOccupancy) {}
 
@@ -80,18 +79,17 @@ export class PlacementSystem {
   }
 
   /**
-   * If the current preview is valid, return a fresh BuildingData for it.
-   * Does NOT mutate any state — the caller commits it.
+   * If the current preview is valid, return a fresh BuildingData for it under
+   * the given id. Does NOT mutate game state — the caller commits it.
    */
-  confirm(): BuildingData | null {
+  confirm(id: string): BuildingData | null {
     if (!this.activeType || !this.pointerCell) return null;
     const size = BUILDING_FOOTPRINTS[this.activeType];
     if (!this.validate(this.pointerCell, size).valid) return null;
 
-    const type = this.activeType;
     const building = makeBuilding({
-      id: `${type.toLowerCase()}-placed-${this.nextId++}`,
-      type,
+      id,
+      type: this.activeType,
       cell: { ...this.pointerCell },
       size: { ...size },
       rotationY: 0,

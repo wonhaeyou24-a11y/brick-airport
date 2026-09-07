@@ -34,6 +34,8 @@ export class SelectionManager {
   private downY = 0;
   private activePointerCount = 0;
   private candidatePointerId: number | null = null;
+  /** When false, taps skip object picking and always report a ground tap. */
+  private pickingEnabled = true;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -62,6 +64,11 @@ export class SelectionManager {
 
   get selected(): Selectable | null {
     return this.current;
+  }
+
+  /** Build mode disables object picking so taps go to placement instead. */
+  setPickingEnabled(enabled: boolean): void {
+    this.pickingEnabled = enabled;
   }
 
   select(target: Selectable | null): void {
@@ -130,18 +137,19 @@ export class SelectionManager {
     this.setPointer(clientX, clientY);
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const roots = this.getSelectables().map((s) => s.object);
-    const hits = this.raycaster.intersectObjects(roots, true);
-
-    for (const hit of hits) {
-      const found = findSelectable(hit.object);
-      if (found) {
-        this.select(found);
-        return;
+    if (this.pickingEnabled) {
+      const roots = this.getSelectables().map((s) => s.object);
+      const hits = this.raycaster.intersectObjects(roots, true);
+      for (const hit of hits) {
+        const found = findSelectable(hit.object);
+        if (found) {
+          this.select(found);
+          return;
+        }
       }
     }
 
-    // Nothing pickable — treat as a ground / cell tap.
+    // Nothing pickable (or picking disabled) — treat as a ground / cell tap.
     this.select(null);
     const point = this.raycaster.ray.intersectPlane(this.groundPlane, this.tmpHit)
       ? this.tmpHit.clone()

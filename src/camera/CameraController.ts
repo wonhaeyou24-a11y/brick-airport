@@ -32,6 +32,9 @@ export class CameraController {
 
   /** Non-null while a focus glide is in progress. */
   private focusGoal: THREE.Vector3 | null = null;
+  /** Non-null while the camera is continuously tracking an object. */
+  private followObject: THREE.Object3D | null = null;
+  private readonly tmpFollow = new THREE.Vector3();
 
   private readonly activePointers = new Map<number, { x: number; y: number }>();
   private pinchStartDistance = 0;
@@ -68,9 +71,10 @@ export class CameraController {
     this.updateFrustum();
   }
 
-  /** Return to the default framing and zoom (cancels any focus glide). */
+  /** Return to the default framing and zoom (cancels focus / follow). */
   reset(): void {
     this.focusGoal = null;
+    this.followObject = null;
     this.viewSize = DEFAULT_VIEW_SIZE;
     this.target.copy(DEFAULT_TARGET);
     this.updateFrustum();
@@ -79,16 +83,36 @@ export class CameraController {
 
   /** Start gliding the view so `position` moves toward screen centre. */
   focusOn(position: THREE.Vector3): void {
+    this.followObject = null;
     this.focusGoal = new THREE.Vector3(position.x, 0, position.z);
   }
 
-  /** Per-frame: advance the focus glide, if any. Called from the game loop. */
+  /**
+   * Continuously keep `object` near screen centre (e.g. a selected aircraft).
+   * Pass null to stop following. Foundation for a full follow mode (spec §23).
+   */
+  followTarget(object: THREE.Object3D | null): void {
+    this.followObject = object;
+    if (!object) this.focusGoal = null;
+  }
+
+  /** Per-frame: advance focus glide / follow tracking. Called from the loop. */
   update(deltaTime: number): void {
-    if (!this.focusGoal) return;
-
     const t = 1 - Math.pow(FOCUS_RESPONSE, deltaTime);
-    this.target.lerp(this.focusGoal, t);
 
+    if (this.followObject) {
+      this.tmpFollow.set(
+        this.followObject.position.x,
+        0,
+        this.followObject.position.z,
+      );
+      this.target.lerp(this.tmpFollow, t);
+      this.applyTransform();
+      return;
+    }
+
+    if (!this.focusGoal) return;
+    this.target.lerp(this.focusGoal, t);
     if (this.target.distanceTo(this.focusGoal) < FOCUS_SNAP) {
       this.target.copy(this.focusGoal);
       this.focusGoal = null;

@@ -1,4 +1,5 @@
 import {
+  CELL_SIZE,
   footprintCells,
   type CellCoord,
   type CellSize,
@@ -115,7 +116,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.2.0",
+    version: "0.2.1",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -148,6 +149,22 @@ export function createInitialState(): GameStateData {
         rotationY: 0,
         level: 1,
       }),
+      makeBuilding({
+        id: "gate-building-2",
+        type: "GATE",
+        cell: { col: 3, row: 4 },
+        size: { cols: 1, rows: 1 },
+        rotationY: 0,
+        level: 1,
+      }),
+      makeBuilding({
+        id: "gate-building-3",
+        type: "GATE",
+        cell: { col: -3, row: 4 },
+        size: { cols: 1, rows: 1 },
+        rotationY: 0,
+        level: 1,
+      }),
     ],
     gates: [
       {
@@ -155,7 +172,21 @@ export function createInitialState(): GameStateData {
         buildingId: "gate-building-1",
         status: "OCCUPIED",
         aircraftId: "aircraft-1",
-        parkPosition: { x: 2, y: 0, z: 7 },
+        parkPosition: { x: 1, y: 0, z: 7 },
+      },
+      {
+        id: "gate-2",
+        buildingId: "gate-building-2",
+        status: "OCCUPIED",
+        aircraftId: "aircraft-2",
+        parkPosition: { x: 7, y: 0, z: 7 },
+      },
+      {
+        id: "gate-3",
+        buildingId: "gate-building-3",
+        status: "AVAILABLE",
+        aircraftId: null,
+        parkPosition: { x: -5, y: 0, z: 7 },
       },
     ],
     aircraft: [
@@ -163,11 +194,21 @@ export function createInitialState(): GameStateData {
         id: "aircraft-1",
         type: "A-001",
         state: "PARKED",
-        position: { x: 2, y: 0, z: 7 },
+        position: { x: 1, y: 0, z: 7 },
         heading: 0,
         speed: 6,
         targetPosition: null,
         homeGateId: "gate-1",
+      },
+      {
+        id: "aircraft-2",
+        type: "A-002",
+        state: "PARKED",
+        position: { x: 7, y: 0, z: 7 },
+        heading: 0,
+        speed: 6,
+        targetPosition: null,
+        homeGateId: "gate-2",
       },
     ],
     selection: { kind: null, id: null },
@@ -211,6 +252,15 @@ export class GameState {
     return this.data.gates.find((g) => g.aircraftId === aircraftId);
   }
 
+  /** First gate that is free (status AVAILABLE and no aircraft), or null. */
+  findAvailableGate(): GateData | null {
+    return (
+      this.data.gates.find(
+        (g) => g.status === "AVAILABLE" && g.aircraftId === null,
+      ) ?? null
+    );
+  }
+
   /** Link an aircraft to a gate (data relationship only — no meshes). */
   occupyGate(gateId: string, aircraftId: string): void {
     const gate = this.getGate(gateId);
@@ -225,6 +275,39 @@ export class GameState {
     if (!gate) return;
     gate.status = "AVAILABLE";
     gate.aircraftId = null;
+  }
+
+  /** A fresh, collision-free building id like "gate-004" / "terminal-002". */
+  nextBuildingId(type: BuildingType): string {
+    const prefix = type.toLowerCase();
+    const re = new RegExp(`^${prefix}\\D*(\\d+)$`);
+    let max = 0;
+    for (const b of this.data.buildings) {
+      const m = re.exec(b.id);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  /**
+   * Register a gate for a freshly placed GATE building. The gate shares the
+   * building id; its park position is just in front of the footprint (toward
+   * the runway, -Z). Returns the new gate.
+   */
+  addGateForBuilding(building: BuildingData): GateData {
+    const centreX =
+      building.cell.col * CELL_SIZE + (building.size.cols * CELL_SIZE) / 2;
+    const centreZ =
+      building.cell.row * CELL_SIZE + (building.size.rows * CELL_SIZE) / 2;
+    const gate: GateData = {
+      id: building.id,
+      buildingId: building.id,
+      status: "AVAILABLE",
+      aircraftId: null,
+      parkPosition: { x: centreX, y: 0, z: centreZ - 2 },
+    };
+    this.data.gates.push(gate);
+    return gate;
   }
 
   setSelection(kind: "AIRCRAFT" | "BUILDING" | null, id: string | null): void {

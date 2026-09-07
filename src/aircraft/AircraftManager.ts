@@ -7,8 +7,8 @@ import type { GameState } from "../core/GameState";
  * AircraftManager — owns Aircraft instances and ticks their routes.
  *
  * Fleet management only: creation, the selectable list, per-frame update,
- * teardown. Path logic lives in AircraftRoute; aircraft state/data lives in
- * GameState. update(deltaTime) is driven from the game loop.
+ * teardown. Path + state-machine logic lives in AircraftRoute; aircraft
+ * state/data lives in GameState. update(deltaTime) is driven from the loop.
  */
 export class AircraftManager {
   readonly group: THREE.Group;
@@ -19,12 +19,12 @@ export class AircraftManager {
     this.group = new THREE.Group();
     this.group.name = "aircraft";
 
-    for (const data of state.data.aircraft) {
+    state.data.aircraft.forEach((data, index) => {
       const craft = new Aircraft(data);
       this.aircraft.push(craft);
       this.group.add(craft.object);
-      this.routes.set(craft.id, new AircraftRoute(data, state));
-    }
+      this.routes.set(craft.id, new AircraftRoute(craft, state, index));
+    });
   }
 
   /** Selectable aircraft, for the SelectionManager. */
@@ -32,9 +32,13 @@ export class AircraftManager {
     return this.aircraft;
   }
 
+  getById(id: string): Aircraft | undefined {
+    return this.aircraft.find((a) => a.id === id);
+  }
+
   update(deltaTime: number): void {
     for (const craft of this.aircraft) {
-      this.routes.get(craft.id)?.tick(craft, deltaTime);
+      this.routes.get(craft.id)?.tick(deltaTime);
     }
   }
 

@@ -1,26 +1,36 @@
 import * as THREE from "three";
-import { GameState } from "./GameState";
-import type { BuildingType } from "./GameState";
+import { GameState, makeBuilding } from "./GameState";
+import type { BuildingData, BuildingType } from "./GameState";
 import { GameLoop } from "./GameLoop";
 import { AirportWorld } from "../world/AirportWorld";
 import { GridOccupancy } from "../world/GridOccupancy";
 import { GridCursor } from "../world/GridCursor";
 import { worldToCell } from "../world/Grid";
 import { isCellInsideGrid, type CellCoord } from "../world/cells";
-import { PlacementSystem } from "../construction/PlacementSystem";
+import {
+  BuildController,
+  type BuildModeState,
+} from "../construction/BuildController";
+import { BuildingPreview } from "../construction/BuildingPreview";
+import {
+  BUILDING_FOOTPRINTS,
+  type PlacementValidity,
+} from "../construction/PlacementSystem";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
 import { HUD, type SelectionInfo } from "../ui/HUD";
+import { BuildMenu } from "../ui/BuildMenu";
 
 /**
  * Game — top-level composition root.
  *
- * Owns the Three.js Scene / Renderer, and creates + updates every system.
+ * Owns the Three.js Scene / Renderer and creates + updates every system.
  * Systems are updated explicitly from update() so each stays independently
- * tickable as the game grows. Three.js objects never drive game logic:
- * GameState is the source of truth.
+ * tickable. Three.js objects never drive game logic: GameState is the source
+ * of truth, and all state / world mutation for a placed building funnels
+ * through commitBuilding().
  */
 export class Game {
   private readonly canvas: HTMLCanvasElement;
@@ -32,11 +42,16 @@ export class Game {
   private readonly world: AirportWorld;
   private readonly occupancy: GridOccupancy;
   private readonly gridCursor: GridCursor;
-  private readonly placement: PlacementSystem;
+  private readonly buildingPreview: BuildingPreview;
+  private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
+  private readonly buildMenu: BuildMenu;
   private readonly loop: GameLoop;
+
+  /** Signature of the currently displayed aircraft selection, for live HUD. */
+  private shownAircraftSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -62,10 +77,22 @@ export class Game {
     this.scene.add(this.world.group);
 
     this.occupancy = new GridOccupancy(this.state.data.buildings);
-    this.placement = new PlacementSystem(this.occupancy);
 
     this.gridCursor = new GridCursor();
     this.scene.add(this.gridCursor.object);
+
+    this.buildingPreview = new BuildingPreview();
+    this.scene.add(this.buildingPreview.object);
+
+    this.buildController = new BuildController(
+      this.occupancy,
+      this.buildingPreview,
+      {
+        nextId: (type) => this.state.nextBuildingId(type),
+        commit: (data) => this.commitBuilding(data),
+        onModeChange: (s) => this.onBuildModeChange(s),
+      },
+    );
 
     this.aircraftManager = new AircraftManager(this.state);
     this.scene.add(this.aircraftManager.group);
@@ -88,12 +115,18 @@ export class Game {
     });
     this.refreshHudStats();
 
+    this.buildMenu = new BuildMenu(hudContainer, {
+      onSelectType: (type) => this.buildController.begin(type),
+      onCancel: () => this.buildController.cancel(),
+    });
+
     this.loop = new GameLoop(
       (dt) => this.update(dt),
       () => this.render(),
     );
 
     window.addEventListener("resize", this.onResize);
+    window.addEventListener("keydown", this.onKeyDown);
   }
 
   start(): void {
@@ -104,34 +137,49 @@ export class Game {
   dispose(): void {
     this.loop.stop();
     window.removeEventListener("resize", this.onResize);
+    window.removeEventListener("keydown", this.onKeyDown);
     this.selection.dispose();
     this.cameraController.dispose();
     this.aircraftManager.dispose();
+    this.buildingPreview.dispose();
     this.gridCursor.dispose();
     this.world.dispose();
     this.renderer.dispose();
   }
 
   /**
-   * Placement foundation, exercised without a build menu yet.
-   * Returns false if the target cells are out of bounds or occupied.
+   * Direct placement helper (console / tests). The build-mode UI goes through
+   * BuildController instead, which calls commitBuilding() via its commit hook.
+   * Returns false if the footprint is out of bounds or occupied.
    */
   placeBuilding(type: BuildingType, col: number, row: number): boolean {
-    this.placement.begin(type);
-    this.placement.setPointerCell({ col, row });
-    const data = this.placement.confirm();
-    if (!data) {
-      this.placement.cancel();
-      return false;
-    }
-    this.state.data.buildings.push(data);
-    this.occupancy.add(data);
-    this.world.addBuilding(data);
-    this.refreshHudStats();
+    const cell: CellCoord = { col, row };
+    const size = BUILDING_FOOTPRINTS[type];
+    if (!this.occupancy.isFootprintFree(cell, size)) return false;
+
+    this.commitBuilding(
+      makeBuilding({
+        id: this.state.nextBuildingId(type),
+        type,
+        cell,
+        size: { ...size },
+        rotationY: 0,
+        level: 1,
+      }),
+    );
     return true;
   }
 
   // --------------------------------------------------------------- internals
+
+  /** Single funnel for adding a building to state + world + occupancy. */
+  private commitBuilding(data: BuildingData): void {
+    this.state.data.buildings.push(data);
+    this.occupancy.add(data);
+    this.world.addBuilding(data);
+    if (data.type === "GATE") this.state.addGateForBuilding(data);
+    this.refreshHudStats();
+  }
 
   private addLights(): void {
     const hemi = new THREE.HemisphereLight(0xffffff, 0x8d9db6, 1.05);
@@ -156,28 +204,76 @@ export class Game {
   }
 
   private onSelectionChange(selected: Selectable | null): void {
-    // Object selection takes precedence over a picked cell.
+    // Build mode owns the pointer; ignore selection churn while it is active.
+    if (this.buildController.isActive) return;
+
     this.gridCursor.setSelected(null);
     this.state.setSelectedCell(null);
+    this.shownAircraftSig = "";
 
     if (selected) {
       this.state.setSelection(selected.selectionKind, selected.id);
       this.hud.setSelection(this.describeSelectable(selected));
-      this.cameraController.focusOn(selected.object.position);
+      if (selected.selectionKind === "AIRCRAFT") {
+        this.cameraController.followTarget(selected.object);
+      } else {
+        this.cameraController.focusOn(selected.object.position);
+      }
     } else {
       this.state.setSelection(null, null);
+      this.hud.setSelection(null);
+      this.cameraController.followTarget(null);
+    }
+  }
+
+  private onBuildModeChange(state: BuildModeState): void {
+    this.buildMenu.setState(state);
+    this.selection.setPickingEnabled(!this.buildController.isActive);
+
+    if (state.mode === "PLACEMENT") {
+      this.selection.select(null);
+      this.state.setSelection(null, null);
+      this.cameraController.followTarget(null);
+      this.gridCursor.setHover(null);
+      this.gridCursor.setSelected(null);
+      this.state.setHoverCell(null);
+      this.state.setSelectedCell(null);
+
+      const status = state.cell
+        ? state.validity
+          ? validityText(state.validity)
+          : "—"
+        : "Move over the grid";
+      this.hud.setSelection({
+        title: "BUILD MODE",
+        lines: [
+          capitalize(state.type ?? "—"),
+          state.cell ? `Cell ${state.cell.col}, ${state.cell.row}` : "—",
+          `Status: ${status}`,
+        ],
+      });
+    } else {
+      this.buildingPreview.hide();
       this.hud.setSelection(null);
     }
   }
 
   private onHoverGround(point: THREE.Vector3 | null): void {
     const cell = this.pointToCell(point);
+    if (this.buildController.isActive) {
+      this.buildController.updateHover(cell);
+      return;
+    }
     this.gridCursor.setHover(cell);
     this.state.setHoverCell(cell);
   }
 
   private onGroundTap(point: THREE.Vector3 | null): void {
     const cell = this.pointToCell(point);
+    if (this.buildController.isActive) {
+      this.buildController.confirmAt(cell);
+      return;
+    }
     this.gridCursor.setSelected(cell);
     this.state.setSelectedCell(cell);
     this.hud.setSelection(cell ? this.describeCell(cell) : null);
@@ -195,8 +291,7 @@ export class Game {
       const lines: string[] = [];
       if (a) {
         lines.push(`State: ${a.state}`);
-        const gate = a.homeGateId ? this.state.getGate(a.homeGateId) : undefined;
-        if (gate) lines.push(`Gate: ${gateName(gate.id)}`);
+        lines.push(`Gate: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -232,6 +327,20 @@ export class Game {
     };
   }
 
+  /** Refresh the HUD when a selected aircraft's state changes mid-flight. */
+  private refreshSelectionHud(): void {
+    if (this.buildController.isActive) return;
+    const sel = this.selection.selected;
+    if (!sel || sel.selectionKind !== "AIRCRAFT") return;
+    const a = this.state.getAircraft(sel.id);
+    if (!a) return;
+
+    const sig = `${a.state}|${a.homeGateId ?? "-"}`;
+    if (sig === this.shownAircraftSig) return;
+    this.shownAircraftSig = sig;
+    this.hud.setSelection(this.describeSelectable(sel));
+  }
+
   private refreshHudStats(): void {
     const { airport } = this.state;
     this.hud.setStats({
@@ -246,6 +355,7 @@ export class Game {
   private update(deltaTime: number): void {
     this.cameraController.update(deltaTime);
     this.aircraftManager.update(deltaTime);
+    this.refreshSelectionHud();
   }
 
   private render(): void {
@@ -261,14 +371,23 @@ export class Game {
     this.renderer.setSize(width, height, false);
     this.cameraController.setViewportSize(width, height);
   };
+
+  private onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") this.buildController.cancel();
+  };
 }
 
-/** "gate-1" -> "G-01" */
+/** "gate-1" -> "G-01", "gate-004" -> "G-04" */
 function gateName(gateId: string): string {
   const match = /(\d+)$/.exec(gateId);
-  return match ? `G-${match[1].padStart(2, "0")}` : gateId;
+  return match ? `G-${String(parseInt(match[1], 10)).padStart(2, "0")}` : gateId;
 }
 
 function capitalize(text: string): string {
   return text.charAt(0) + text.slice(1).toLowerCase();
+}
+
+function validityText(v: PlacementValidity): string {
+  if (v.valid) return "VALID";
+  return v.reason === "OUT_OF_BOUNDS" ? "INVALID (out of bounds)" : "INVALID (occupied)";
 }
