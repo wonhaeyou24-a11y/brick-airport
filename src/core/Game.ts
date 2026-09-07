@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GameState, makeBuilding } from "./GameState";
 import type { BuildingData, BuildingType } from "./GameState";
 import { GameLoop } from "./GameLoop";
+import { GateStatusSync } from "./GateStatusSync";
 import { AirportWorld } from "../world/AirportWorld";
 import { GridOccupancy } from "../world/GridOccupancy";
 import { GridCursor } from "../world/GridCursor";
@@ -52,6 +53,7 @@ export class Game {
   private readonly flightScheduler: FlightScheduler;
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
+  private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
   private readonly buildMenu: BuildMenu;
@@ -114,6 +116,7 @@ export class Game {
     this.scene.add(this.passengerManager.group);
 
     this.economy = new Economy(this.state);
+    this.gateStatus = new GateStatusSync(this.state);
 
     this.selection = new SelectionManager(
       canvas,
@@ -324,13 +327,22 @@ export class Game {
       const gate = this.state.getGateByBuilding(b.id);
       const lines: string[] = [];
       if (gate) {
-        lines.push(`Status: ${gate.status}`);
-        lines.push(
-          gate.aircraftId ? `Aircraft: ${gate.aircraftId}` : "Aircraft: —",
-        );
         const board = this.state.getGateBoarding(gate.id);
-        if (board.total > 0) {
-          lines.push(`Boarding: ${board.boarded} / ${board.total}`);
+        if (
+          (gate.status === "BOARDING" || gate.status === "READY") &&
+          board.total > 0
+        ) {
+          lines.push(`${gate.status} · ${board.boarded} / ${board.total}`);
+        } else {
+          lines.push(gate.status);
+        }
+        if (gate.aircraftId) {
+          const ac = this.state.getAircraft(gate.aircraftId);
+          const inbound =
+            gate.status === "AVAILABLE" && !!ac && ac.state !== "PARKED";
+          lines.push(
+            `Aircraft: ${gate.aircraftId}${inbound ? " (inbound)" : ""}`,
+          );
         }
       }
       return {
@@ -406,6 +418,9 @@ export class Game {
     this.flightScheduler.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
+
+    // Derive each gate's operational status from the aircraft + passengers.
+    this.gateStatus.update(deltaTime);
 
     // Economy: pay ticket revenue for passengers that just boarded.
     const revenue = this.economy.settleBoarding();

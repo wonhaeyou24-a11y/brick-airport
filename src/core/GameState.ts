@@ -18,8 +18,14 @@ import { ECONOMY_CONFIG } from "../economy/EconomyConfig";
 export type Vec3 = { x: number; y: number; z: number };
 
 /**
- * Gate operating states. AVAILABLE / OCCUPIED are used now; BOARDING / READY /
- * DEPARTING are reserved for the operations cycle in a later stage.
+ * Gate *operational* status, shown to the player and kept in sync each frame
+ * by GateStatusSync from the aircraft lifecycle + passenger boarding:
+ *
+ *   AVAILABLE -> BOARDING -> READY -> DEPARTING -> AVAILABLE
+ *
+ * The internal "this gate is reserved" signal is `aircraftId !== null`, which
+ * is separate and untouched. OCCUPIED is a legacy value from pre-V0.4.2 saves;
+ * the constructor migrates it and GateStatusSync never writes it.
  */
 export type GateStatus =
   | "AVAILABLE"
@@ -162,7 +168,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.4.1",
+    version: "0.4.2",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -286,6 +292,13 @@ export class GameState {
         p.revenueProcessed = p.state === "BOARDED";
       }
     }
+    // Forward-compat (pre-V0.4.2): OCCUPIED is not an operational status.
+    // GateStatusSync recomputes every gate each frame; seed a sane value here.
+    for (const g of this.data.gates) {
+      if (g.status === "OCCUPIED") {
+        g.status = g.aircraftId ? "BOARDING" : "AVAILABLE";
+      }
+    }
   }
 
   get airport(): AirportData {
@@ -342,20 +355,27 @@ export class GameState {
     );
   }
 
-  /** Link an aircraft to a gate (data relationship only — no meshes). */
+  /**
+   * Reserve / link a gate to an aircraft (data relationship only — no meshes).
+   * Only touches `aircraftId`; the operational `status` is derived each frame
+   * by GateStatusSync. Cancels any stale DEPARTING linger defensively.
+   */
   occupyGate(gateId: string, aircraftId: string): void {
     const gate = this.getGate(gateId);
     if (!gate) return;
-    gate.status = "OCCUPIED";
     gate.aircraftId = aircraftId;
+    if (gate.status === "DEPARTING") gate.status = "BOARDING";
   }
 
-  /** Free a gate and break its aircraft link. */
+  /**
+   * The aircraft at this gate is pushing back. Marks the gate DEPARTING and
+   * keeps `aircraftId` for a short linger so the player sees it leave;
+   * GateStatusSync clears both once the linger ends (spec §7, §8).
+   */
   releaseGate(gateId: string): void {
     const gate = this.getGate(gateId);
     if (!gate) return;
-    gate.status = "AVAILABLE";
-    gate.aircraftId = null;
+    gate.status = "DEPARTING";
   }
 
   /** A fresh, collision-free building id like "gate-004" / "terminal-002". */
