@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 /** Kinds of things the player can click / tap in the world. */
-export type SelectionKind = "AIRCRAFT" | "BUILDING";
+export type SelectionKind = "AIRCRAFT" | "BUILDING" | "PASSENGER";
 
 /**
  * Anything selectable exposes a root Object3D (whose `userData.selectable`

@@ -38,6 +38,8 @@ export class PassengerManager {
   constructor(
     private readonly state: GameState,
     private readonly waypoints: PassengerWaypoints,
+    /** Called just before a passenger's mesh is removed (selection cleanup). */
+    private readonly onPassengerRemoved?: (id: string) => void,
   ) {
     this.group = new THREE.Group();
     this.group.name = "passengers";
@@ -45,6 +47,11 @@ export class PassengerManager {
 
   getById(id: string): Passenger | undefined {
     return this.passengers.get(id);
+  }
+
+  /** Live passenger meshes, for the SelectionManager. */
+  get selectables(): Passenger[] {
+    return [...this.passengers.values()];
   }
 
   get count(): number {
@@ -183,6 +190,7 @@ export class PassengerManager {
     // Remove entities whose PassengerData is gone.
     for (const [id, passenger] of this.passengers) {
       if (this.state.getPassenger(id)) continue;
+      this.onPassengerRemoved?.(id);
       passenger.dispose();
       this.passengers.delete(id);
       this.routes.delete(id);

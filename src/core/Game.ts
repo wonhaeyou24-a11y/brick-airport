@@ -112,7 +112,11 @@ export class Game {
       spawnAircraft: (data) => this.aircraftManager.spawn(data),
     });
 
-    this.passengerManager = new PassengerManager(this.state, DEFAULT_WAYPOINTS);
+    this.passengerManager = new PassengerManager(
+      this.state,
+      DEFAULT_WAYPOINTS,
+      (id) => this.onPassengerRemoved(id),
+    );
     this.scene.add(this.passengerManager.group);
 
     this.economy = new Economy(this.state);
@@ -222,7 +226,19 @@ export class Game {
   }
 
   private collectSelectables(): Selectable[] {
-    return [...this.world.selectables, ...this.aircraftManager.selectables];
+    return [
+      ...this.world.selectables,
+      ...this.aircraftManager.selectables,
+      ...this.passengerManager.selectables,
+    ];
+  }
+
+  /** A selected passenger was removed by PassengerManager — drop the selection. */
+  private onPassengerRemoved(id: string): void {
+    const sel = this.selection.selected;
+    if (sel && sel.selectionKind === "PASSENGER" && sel.id === id) {
+      this.selection.select(null);
+    }
   }
 
   private onSelectionChange(selected: Selectable | null): void {
@@ -322,6 +338,17 @@ export class Game {
       return { title: s.getSelectionLabel(), lines };
     }
 
+    if (s.selectionKind === "PASSENGER") {
+      const p = this.state.getPassenger(s.id);
+      const lines: string[] = [];
+      if (p) {
+        lines.push(`${p.routeType} · ${p.state}`);
+        lines.push(`Aircraft: ${p.aircraftId ?? "—"}`);
+        lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
+      }
+      return { title: s.getSelectionLabel(), lines };
+    }
+
     const b = this.state.getBuilding(s.id);
     if (b?.type === "GATE") {
       const gate = this.state.getGateByBuilding(b.id);
@@ -384,6 +411,9 @@ export class Game {
         const b = this.state.getAircraftBoarding(a.id);
         sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}`;
       }
+    } else if (sel.selectionKind === "PASSENGER") {
+      const p = this.state.getPassenger(sel.id);
+      if (p) sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}`;
     } else {
       const building = this.state.getBuilding(sel.id);
       if (building?.type === "GATE") {

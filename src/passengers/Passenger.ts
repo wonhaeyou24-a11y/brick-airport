@@ -1,14 +1,24 @@
 import * as THREE from "three";
 import type { PassengerData } from "../core/GameState";
+import {
+  type Selectable,
+  type SelectionKind,
+  tagSelectable,
+} from "../selection/Selectable";
+import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
 
 /**
- * Passenger — placeholder brick-toy minifig.
+ * Passenger — placeholder brick-toy minifig, also a Selectable (V0.4-D).
  *
  * Head + body + arms + legs + a little bag, assembled from primitive geometry.
  * Original toy style, no branded/proprietary character design (spec §11).
  * All authoritative values live in the referenced PassengerData; this class
  * only mirrors position / facing onto the group. Geometry is created once and
  * reused — PassengerManager just updates the transform (perf rule 25).
+ *
+ * The body/head/limb materials are module-level and shared between passengers,
+ * so highlighting goes through setEmissiveHighlight, which clones a material
+ * per mesh on first use and never mutates the shared ones (spec §12, §21).
  */
 
 /** Cosmetic body colours, indexed by PassengerData.colorIndex. */
@@ -39,8 +49,9 @@ const bodyMats = BODY_COLORS.map(
   (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }),
 );
 
-export class Passenger {
+export class Passenger implements Selectable {
   readonly id: string;
+  readonly selectionKind: SelectionKind = "PASSENGER";
   readonly object: THREE.Group;
   readonly data: PassengerData;
 
@@ -53,7 +64,16 @@ export class Passenger {
     this.object = new THREE.Group();
     this.object.name = data.id;
     this.build();
+    tagSelectable(this.object, this);
     this.syncFromData();
+  }
+
+  setHighlighted(highlighted: boolean): void {
+    setEmissiveHighlight(this.object, highlighted);
+  }
+
+  getSelectionLabel(): string {
+    return `Passenger ${passengerLabel(this.data.id)}`;
   }
 
   private build(): void {
@@ -104,10 +124,17 @@ export class Passenger {
 
   dispose(): void {
     // Geometry / materials are module-level shared resources — do not dispose
-    // them here. Just detach this passenger's group tree.
+    // them here. Free only the per-mesh highlight clones, then detach the tree.
+    disposeHighlight(this.object);
     this.object.removeFromParent();
     this.object.clear();
   }
+}
+
+/** "pax-0001" -> "P-001" */
+function passengerLabel(id: string): string {
+  const m = /(\d+)$/.exec(id);
+  return m ? `P-${String(parseInt(m[1], 10)).padStart(3, "0")}` : id;
 }
 
 /** Free the module-level shared passenger resources (called on teardown). */

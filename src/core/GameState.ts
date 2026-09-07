@@ -145,7 +145,7 @@ export interface GameStateData {
   passengers: PassengerData[];
   /** Currently selected entity, for HUD display. */
   selection: {
-    kind: "AIRCRAFT" | "BUILDING" | null;
+    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | null;
     id: string | null;
   };
   /** Grid interaction state (hover / picked cell). */
@@ -168,7 +168,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.4.2",
+    version: "0.4.3",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -463,7 +463,10 @@ export class GameState {
     return dep.length === 0 || dep.every((p) => p.state === "BOARDED");
   }
 
-  setSelection(kind: "AIRCRAFT" | "BUILDING" | null, id: string | null): void {
+  setSelection(
+    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | null,
+    id: string | null,
+  ): void {
     this.data.selection = { kind, id };
   }
 
