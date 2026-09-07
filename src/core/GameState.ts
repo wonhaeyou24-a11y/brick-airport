@@ -36,6 +36,23 @@ export type AircraftState =
   | "FLYING"
   | "LANDING";
 
+/**
+ * Passenger lifecycle. DEPARTURE runs WAITING -> ... -> BOARDED; ARRIVAL runs
+ * DISEMBARKING -> TO_TERMINAL_AFTER_ARRIVAL -> ARRIVED.
+ */
+export type PassengerState =
+  | "WAITING"
+  | "TO_TERMINAL"
+  | "CHECK_IN"
+  | "TO_GATE"
+  | "BOARDING"
+  | "BOARDED"
+  | "DISEMBARKING"
+  | "TO_TERMINAL_AFTER_ARRIVAL"
+  | "ARRIVED";
+
+export type PassengerRouteType = "DEPARTURE" | "ARRIVAL";
+
 export interface AirportData {
   id: string;
   name: string;
@@ -83,6 +100,25 @@ export interface AircraftData {
   targetPosition: Vec3 | null;
   /** Gate the aircraft is assigned to. */
   homeGateId: string | null;
+  /** Max passengers this aircraft carries (drives departure spawn count). */
+  capacity: number;
+}
+
+export interface PassengerData {
+  id: string;
+  /** Flight / aircraft this passenger belongs to. */
+  flightId: string | null;
+  aircraftId: string | null;
+  /** Gate the passenger is heading to / arriving from. */
+  gateId: string | null;
+  state: PassengerState;
+  routeType: PassengerRouteType;
+  position: Vec3;
+  targetPosition: Vec3 | null;
+  /** Units per second. */
+  speed: number;
+  /** Cosmetic palette index for the placeholder minifig. */
+  colorIndex: number;
 }
 
 export interface GameStateData {
@@ -91,6 +127,7 @@ export interface GameStateData {
   buildings: BuildingData[];
   gates: GateData[];
   aircraft: AircraftData[];
+  passengers: PassengerData[];
   /** Currently selected entity, for HUD display. */
   selection: {
     kind: "AIRCRAFT" | "BUILDING" | null;
@@ -116,7 +153,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.2.1",
+    version: "0.3.0",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -199,6 +236,7 @@ export function createInitialState(): GameStateData {
         speed: 6,
         targetPosition: null,
         homeGateId: "gate-1",
+        capacity: 6,
       },
       {
         id: "aircraft-2",
@@ -209,8 +247,10 @@ export function createInitialState(): GameStateData {
         speed: 6,
         targetPosition: null,
         homeGateId: "gate-2",
+        capacity: 4,
       },
     ],
+    passengers: [],
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -225,6 +265,8 @@ export class GameState {
 
   constructor(data: GameStateData = createInitialState()) {
     this.data = data;
+    // Forward-compat: a state saved before V0.3 has no passengers array.
+    if (!this.data.passengers) this.data.passengers = [];
   }
 
   get airport(): AirportData {
@@ -308,6 +350,58 @@ export class GameState {
     };
     this.data.gates.push(gate);
     return gate;
+  }
+
+  // ------------------------------------------------------------- passengers
+
+  getPassenger(id: string): PassengerData | undefined {
+    return this.data.passengers.find((p) => p.id === id);
+  }
+
+  addPassenger(passenger: PassengerData): void {
+    this.data.passengers.push(passenger);
+  }
+
+  removePassenger(id: string): void {
+    const i = this.data.passengers.findIndex((p) => p.id === id);
+    if (i >= 0) this.data.passengers.splice(i, 1);
+  }
+
+  getPassengersForAircraft(
+    aircraftId: string,
+    routeType?: PassengerRouteType,
+  ): PassengerData[] {
+    return this.data.passengers.filter(
+      (p) =>
+        p.aircraftId === aircraftId &&
+        (routeType === undefined || p.routeType === routeType),
+    );
+  }
+
+  /** Departure boarding progress for an aircraft: { total, boarded }. */
+  getAircraftBoarding(aircraftId: string): { total: number; boarded: number } {
+    const dep = this.getPassengersForAircraft(aircraftId, "DEPARTURE");
+    return {
+      total: dep.length,
+      boarded: dep.filter((p) => p.state === "BOARDED").length,
+    };
+  }
+
+  /** Boarding progress at a gate (via the aircraft currently assigned). */
+  getGateBoarding(gateId: string): { total: number; boarded: number } {
+    const gate = this.getGate(gateId);
+    if (!gate?.aircraftId) return { total: 0, boarded: 0 };
+    return this.getAircraftBoarding(gate.aircraftId);
+  }
+
+  /**
+   * True once every departure passenger for the aircraft has BOARDED (or there
+   * are none — keeps pre-passenger behaviour intact). AircraftRoute reads this
+   * to hold departure until boarding completes (spec §16).
+   */
+  areAircraftPassengersReady(aircraftId: string): boolean {
+    const dep = this.getPassengersForAircraft(aircraftId, "DEPARTURE");
+    return dep.length === 0 || dep.every((p) => p.state === "BOARDED");
   }
 
   setSelection(kind: "AIRCRAFT" | "BUILDING" | null, id: string | null): void {

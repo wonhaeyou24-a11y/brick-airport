@@ -17,6 +17,8 @@ import {
   type PlacementValidity,
 } from "../construction/PlacementSystem";
 import { AircraftManager } from "../aircraft/AircraftManager";
+import { PassengerManager } from "../passengers/PassengerManager";
+import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
 import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
@@ -45,6 +47,7 @@ export class Game {
   private readonly buildingPreview: BuildingPreview;
   private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
+  private readonly passengerManager: PassengerManager;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
   private readonly buildMenu: BuildMenu;
@@ -52,6 +55,8 @@ export class Game {
 
   /** Signature of the currently displayed aircraft selection, for live HUD. */
   private shownAircraftSig = "";
+  /** Last passenger count shown in the HUD stats. */
+  private shownPassengerCount = -1;
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -97,6 +102,9 @@ export class Game {
     this.aircraftManager = new AircraftManager(this.state);
     this.scene.add(this.aircraftManager.group);
 
+    this.passengerManager = new PassengerManager(this.state, DEFAULT_WAYPOINTS);
+    this.scene.add(this.passengerManager.group);
+
     this.selection = new SelectionManager(
       canvas,
       this.cameraController.camera,
@@ -140,6 +148,7 @@ export class Game {
     window.removeEventListener("keydown", this.onKeyDown);
     this.selection.dispose();
     this.cameraController.dispose();
+    this.passengerManager.dispose();
     this.aircraftManager.dispose();
     this.buildingPreview.dispose();
     this.gridCursor.dispose();
@@ -292,6 +301,10 @@ export class Game {
       if (a) {
         lines.push(`State: ${a.state}`);
         lines.push(`Gate: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
+        const board = this.state.getAircraftBoarding(a.id);
+        if (board.total > 0) {
+          lines.push(`Passengers: ${board.boarded} / ${board.total}`);
+        }
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -299,14 +312,20 @@ export class Game {
     const b = this.state.getBuilding(s.id);
     if (b?.type === "GATE") {
       const gate = this.state.getGateByBuilding(b.id);
+      const lines: string[] = [];
+      if (gate) {
+        lines.push(`Status: ${gate.status}`);
+        lines.push(
+          gate.aircraftId ? `Aircraft: ${gate.aircraftId}` : "Aircraft: —",
+        );
+        const board = this.state.getGateBoarding(gate.id);
+        if (board.total > 0) {
+          lines.push(`Boarding: ${board.boarded} / ${board.total}`);
+        }
+      }
       return {
         title: gate ? `Gate ${gateName(gate.id)}` : "Gate",
-        lines: gate
-          ? [
-              `Status: ${gate.status}`,
-              gate.aircraftId ? `Aircraft: ${gate.aircraftId}` : "Aircraft: —",
-            ]
-          : [],
+        lines,
       };
     }
     if (b) {
@@ -327,16 +346,34 @@ export class Game {
     };
   }
 
-  /** Refresh the HUD when a selected aircraft's state changes mid-flight. */
+  /**
+   * Refresh the HUD when a selected aircraft's state / boarding changes, or a
+   * selected gate's boarding changes.
+   */
   private refreshSelectionHud(): void {
     if (this.buildController.isActive) return;
     const sel = this.selection.selected;
-    if (!sel || sel.selectionKind !== "AIRCRAFT") return;
-    const a = this.state.getAircraft(sel.id);
-    if (!a) return;
+    if (!sel) return;
 
-    const sig = `${a.state}|${a.homeGateId ?? "-"}`;
-    if (sig === this.shownAircraftSig) return;
+    let sig: string | null = null;
+    if (sel.selectionKind === "AIRCRAFT") {
+      const a = this.state.getAircraft(sel.id);
+      if (a) {
+        const b = this.state.getAircraftBoarding(a.id);
+        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}`;
+      }
+    } else {
+      const building = this.state.getBuilding(sel.id);
+      if (building?.type === "GATE") {
+        const gate = this.state.getGateByBuilding(building.id);
+        if (gate) {
+          const b = this.state.getGateBoarding(gate.id);
+          sig = `${gate.status}|${gate.aircraftId ?? "-"}|${b.boarded}/${b.total}`;
+        }
+      }
+    }
+
+    if (sig === null || sig === this.shownAircraftSig) return;
     this.shownAircraftSig = sig;
     this.hud.setSelection(this.describeSelectable(sel));
   }
@@ -349,13 +386,23 @@ export class Game {
       money: airport.money,
       aircraftCount: this.state.data.aircraft.length,
       gateCount: this.state.data.gates.length,
+      passengerCount: this.state.data.passengers.length,
     });
   }
 
   private update(deltaTime: number): void {
     this.cameraController.update(deltaTime);
     this.aircraftManager.update(deltaTime);
+    this.passengerManager.update(deltaTime);
     this.refreshSelectionHud();
+    this.refreshPassengerStats();
+  }
+
+  private refreshPassengerStats(): void {
+    const n = this.passengerManager.count;
+    if (n === this.shownPassengerCount) return;
+    this.shownPassengerCount = n;
+    this.refreshHudStats();
   }
 
   private render(): void {

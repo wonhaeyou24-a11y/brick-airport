@@ -10,6 +10,7 @@ export interface HudStats {
   money: number;
   aircraftCount: number;
   gateCount: number;
+  passengerCount: number;
 }
 
 /** What to show in the "SELECTED" panel. */
@@ -31,6 +32,7 @@ export class HUD {
   private readonly levelEl: HTMLElement;
   private readonly aircraftEl: HTMLElement;
   private readonly gateEl: HTMLElement;
+  private readonly passengerEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
 
@@ -43,6 +45,7 @@ export class HUD {
     this.moneyEl = this.must(".js-money");
     this.aircraftEl = this.must(".js-aircraft");
     this.gateEl = this.must(".js-gate");
+    this.passengerEl = this.must(".js-passengers");
     this.selectionEl = this.must(".js-selection");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
@@ -57,6 +60,7 @@ export class HUD {
     this.moneyEl.textContent = `$${stats.money.toLocaleString("en-US")}`;
     this.aircraftEl.textContent = String(stats.aircraftCount);
     this.gateEl.textContent = String(stats.gateCount);
+    this.passengerEl.textContent = String(stats.passengerCount);
   }
 
   setSelection(info: SelectionInfo | null): void {
@@ -96,6 +100,7 @@ const TEMPLATE = /* html */ `
       <div class="hud-stat"><span>Money</span><b class="js-money">$1,000</b></div>
       <div class="hud-stat"><span>Aircraft</span><b class="js-aircraft">1</b></div>
       <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
+      <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>
     </div>
   </div>
 
