@@ -39,6 +39,13 @@ export interface AirportStats {
   boardingRate: number;
 }
 
+/** One completed-flight row in the Recent Flights panel (V0.6-E). */
+export interface FlightHistoryEntry {
+  id: string;
+  route: string;
+  revenue: number;
+}
+
 export interface HudCallbacks {
   onZoomIn(): void;
   onZoomOut(): void;
@@ -65,6 +72,8 @@ export class HUD {
   private readonly statAvgEl: HTMLElement;
   private readonly statBoardingEl: HTMLElement;
   private readonly noticeEl: HTMLElement;
+  private readonly flightHistoryEl: HTMLElement;
+  private readonly flightHistoryListEl: HTMLElement;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -91,6 +100,8 @@ export class HUD {
     this.statAvgEl = this.must(".js-stat-avg");
     this.statBoardingEl = this.must(".js-stat-boarding");
     this.noticeEl = this.must(".js-notice");
+    this.flightHistoryEl = this.must(".js-flight-history");
+    this.flightHistoryListEl = this.must(".js-flight-history-list");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -176,6 +187,28 @@ export class HUD {
     this.statBoardingEl.textContent = `${s.boardingRate}%`;
   }
 
+  /**
+   * Render the Recent Flights panel (V0.6-E). A separate panel from Airport
+   * Statistics — never replaces it. Hidden until the first flight completes.
+   */
+  setFlightHistory(entries: FlightHistoryEntry[]): void {
+    if (entries.length === 0) {
+      this.flightHistoryEl.hidden = true;
+      return;
+    }
+    this.flightHistoryEl.hidden = false;
+    this.flightHistoryListEl.innerHTML = entries
+      .map(
+        (e) =>
+          `<div class="flight-row">` +
+          `<span class="fr-id">${escapeHtml(e.id)}</span>` +
+          `<span class="fr-route">${escapeHtml(e.route)}</span>` +
+          `<span class="fr-rev">$${e.revenue.toLocaleString("en-US")}</span>` +
+          `</div>`,
+      )
+      .join("");
+  }
+
   private must(selector: string): HTMLElement {
     const el = this.root.querySelector<HTMLElement>(selector);
     if (!el) throw new Error(`HUD: missing element "${selector}"`);
@@ -207,6 +240,13 @@ const TEMPLATE = /* html */ `
       <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
       <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>
       <div class="hud-stat"><span>Flights</span><b class="js-flights">0</b></div>
+    </div>
+  </div>
+
+  <div class="hud-mid">
+    <div class="hud-panel flight-history js-flight-history" hidden>
+      <div class="stat-panel-title">Recent Flights</div>
+      <div class="flight-history-list js-flight-history-list"></div>
     </div>
   </div>
 

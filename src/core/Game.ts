@@ -1,6 +1,11 @@
 import * as THREE from "three";
-import { GameState, makeBuilding } from "./GameState";
-import type { BuildingData, BuildingType } from "./GameState";
+import { GameState, makeBuilding, isFlightOver } from "./GameState";
+import type {
+  BuildingData,
+  BuildingType,
+  FlightData,
+  FlightState,
+} from "./GameState";
 import { GameLoop } from "./GameLoop";
 import { GateStatusSync } from "./GateStatusSync";
 import { AirportWorld } from "../world/AirportWorld";
@@ -75,6 +80,8 @@ export class Game {
   private shownStatisticsSig = "";
   /** Signature of the BuildMenu availability (level | money bucket). */
   private shownBuildMenuSig = "";
+  /** Signature of the Recent Flights panel (V0.6-E). */
+  private shownHistorySig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -386,12 +393,19 @@ export class Game {
       const a = this.state.getAircraft(s.id);
       const lines: string[] = [];
       if (a) {
+        const flight = this.state.getFlightByAircraft(a.id);
+        if (flight) {
+          lines.push(`Flight: ${flight.id}`);
+          lines.push(`Route: ${flightRoute(flight)}`);
+          lines.push(`Status: ${flight.state}`);
+        }
         lines.push(`State: ${a.state}`);
         lines.push(`Gate: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
         const board = this.state.getAircraftBoarding(a.id);
         if (board.total > 0) {
           lines.push(`Passengers: ${board.boarded} / ${board.total}`);
         }
+        if (flight) lines.push(flightProgressLine(flight.state));
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -400,7 +414,11 @@ export class Game {
       const p = this.state.getPassenger(s.id);
       const lines: string[] = [];
       if (p) {
+        const flight = this.state.getFlight(p.flightId);
+        lines.push(`Flight: ${flight ? flight.id : "—"}`);
+        if (flight) lines.push(`Route: ${flightRoute(flight)}`);
         lines.push(`${p.routeType} · ${p.state}`);
+        if (flight) lines.push(`Flight status: ${flight.state}`);
         lines.push(`Aircraft: ${p.aircraftId ?? "—"}`);
         lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
       }
@@ -429,6 +447,9 @@ export class Game {
             `Aircraft: ${gate.aircraftId}${inbound ? " (inbound)" : ""}`,
           );
         }
+        const gateFlight = this.activeFlightForGate(gate.id);
+        lines.push(`Flight: ${gateFlight ? gateFlight.id : "NONE"}`);
+        if (gateFlight) lines.push(`Route: ${flightRoute(gateFlight)}`);
       }
       return {
         title: gate ? `Gate ${gateName(gate.id)}` : "Gate",
@@ -440,6 +461,18 @@ export class Game {
       return { title: label, lines: [`Type: ${label}`, `Level: ${b.level}`] };
     }
     return { title: s.getSelectionLabel() };
+  }
+
+  /** The active (non-finished) flight tied to a gate, via its aircraft or gateId. */
+  private activeFlightForGate(gateId: string): FlightData | undefined {
+    const gate = this.state.getGate(gateId);
+    if (gate?.aircraftId) {
+      const byAircraft = this.state.getFlightByAircraft(gate.aircraftId);
+      if (byAircraft) return byAircraft;
+    }
+    return this.state.data.flights.find(
+      (f) => f.gateId === gateId && !isFlightOver(f.state),
+    );
   }
 
   private describeCell(cell: CellCoord): SelectionInfo {
@@ -467,18 +500,23 @@ export class Game {
       const a = this.state.getAircraft(sel.id);
       if (a) {
         const b = this.state.getAircraftBoarding(a.id);
-        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}`;
+        const f = this.state.getFlightByAircraft(a.id);
+        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
       }
     } else if (sel.selectionKind === "PASSENGER") {
       const p = this.state.getPassenger(sel.id);
-      if (p) sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}`;
+      if (p) {
+        const f = this.state.getFlight(p.flightId);
+        sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
+      }
     } else {
       const building = this.state.getBuilding(sel.id);
       if (building?.type === "GATE") {
         const gate = this.state.getGateByBuilding(building.id);
         if (gate) {
           const b = this.state.getGateBoarding(gate.id);
-          sig = `${gate.status}|${gate.aircraftId ?? "-"}|${b.boarded}/${b.total}`;
+          const f = this.activeFlightForGate(gate.id);
+          sig = `${gate.status}|${gate.aircraftId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
         }
       }
     }
@@ -518,7 +556,39 @@ export class Game {
     this.refreshSelectionHud();
     this.refreshDynamicStats();
     this.refreshStatistics();
+    this.refreshFlightHistory();
     this.refreshBuildMenu();
+  }
+
+  /**
+   * Recent Flights panel (V0.6-E) — the last few COMPLETED flights, newest
+   * first. A separate panel from Airport Statistics; never replaces it. DOM is
+   * only touched when the signature changes (perf §31).
+   */
+  private refreshFlightHistory(): void {
+    const completed = this.state.data.flights
+      .filter((f) => f.state === "COMPLETED")
+      .sort(
+        (a, b) =>
+          (b.completedAt ?? 0) - (a.completedAt ?? 0) ||
+          (b.createdAt ?? 0) - (a.createdAt ?? 0) ||
+          b.id.localeCompare(a.id),
+      )
+      .slice(0, 5);
+
+    const sig = completed
+      .map((f) => `${f.id}:${f.revenue ?? 0}`)
+      .join(",");
+    if (sig === this.shownHistorySig) return;
+    this.shownHistorySig = sig;
+
+    this.hud.setFlightHistory(
+      completed.map((f) => ({
+        id: f.id,
+        route: flightRoute(f),
+        revenue: f.revenue ?? 0,
+      })),
+    );
   }
 
   /** Bump airport.level when cumulative stats cross a threshold (one-shot). */
@@ -621,6 +691,34 @@ export class Game {
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Escape") this.buildController.cancel();
   };
+}
+
+/** "SEOUL → TOKYO" for a departure, "TOKYO → SEOUL" for an arrival. */
+function flightRoute(flight: FlightData): string {
+  return flight.routeType === "ARRIVAL"
+    ? `${flight.destination} → ${flight.origin}`
+    : `${flight.origin} → ${flight.destination}`;
+}
+
+/** The departure progress steps, in order (spec V0.6-D). */
+const FLIGHT_PROGRESS_STEPS: readonly FlightState[] = [
+  "SCHEDULED",
+  "BOARDING",
+  "READY",
+  "DEPARTING",
+  "FLYING",
+];
+
+/** Compact text progress bar: "Progress: ●●●○○". Pure text, no DOM work. */
+function flightProgressLine(state: FlightState): string {
+  if (state === "CANCELLED") return "Progress: cancelled";
+  const idx = FLIGHT_PROGRESS_STEPS.indexOf(state);
+  const filled =
+    state === "COMPLETED" || idx < 0 ? FLIGHT_PROGRESS_STEPS.length : idx + 1;
+  const dots = FLIGHT_PROGRESS_STEPS.map((_, i) =>
+    i < filled ? "●" : "○",
+  ).join("");
+  return `Progress: ${dots}`;
 }
 
 /** "gate-1" -> "G-01", "gate-004" -> "G-04" */

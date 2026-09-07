@@ -155,11 +155,53 @@ body {
   transform: translate(-50%, 0);
 }
 
+.hud-mid {
+  display: flex;
+  align-items: flex-start;
+}
+
 .hud-bottom {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--hud-gap);
+}
+
+/* --------------------------------------------------- flight history --- */
+
+.flight-history {
+  max-width: 340px;
+  font-size: 12px;
+}
+
+.flight-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flight-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  white-space: nowrap;
+}
+
+.flight-row .fr-id {
+  font-weight: 800;
+}
+
+.flight-row .fr-route {
+  flex: 1;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flight-row .fr-rev {
+  color: var(--brick-green);
+  font-weight: 800;
 }
 
 .hud-context {
@@ -405,5 +447,20 @@ body {
 
   .stat-card strong {
     font-size: 14px;
+  }
+
+  .flight-history {
+    max-width: 46vw;
+  }
+
+  .flight-row {
+    flex-direction: column;
+    gap: 0;
+    align-items: flex-start;
+    white-space: normal;
+  }
+
+  .flight-row .fr-route {
+    flex: none;
   }
 }
