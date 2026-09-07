@@ -4,6 +4,7 @@ import {
   type CellCoord,
   type CellSize,
 } from "../world/cells";
+import { ECONOMY_CONFIG } from "../economy/EconomyConfig";
 
 /**
  * GameState — the data-first source of truth for Brick Airport.
@@ -59,6 +60,10 @@ export interface AirportData {
   level: number;
   money: number;
   reputation: number;
+  /** Lifetime ticket revenue. Optional for pre-V0.4 states (read via `?? 0`). */
+  totalRevenue?: number;
+  /** Lifetime passengers that have boarded. Optional for pre-V0.4 states. */
+  totalPassengers?: number;
 }
 
 export interface BuildingData {
@@ -119,6 +124,8 @@ export interface PassengerData {
   speed: number;
   /** Cosmetic palette index for the placeholder minifig. */
   colorIndex: number;
+  /** Set once ticket revenue for this passenger has been paid (double-pay guard). */
+  revenueProcessed: boolean;
 }
 
 export interface GameStateData {
@@ -153,13 +160,15 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.3.0",
+    version: "0.4.0",
     airport: {
       id: "airport-1",
       name: "My Airport",
       level: 1,
-      money: 1000,
+      money: ECONOMY_CONFIG.startingMoney,
       reputation: 0,
+      totalRevenue: 0,
+      totalPassengers: 0,
     },
     buildings: [
       makeBuilding({
@@ -267,6 +276,13 @@ export class GameState {
     this.data = data;
     // Forward-compat: a state saved before V0.3 has no passengers array.
     if (!this.data.passengers) this.data.passengers = [];
+    // Forward-compat: pre-V0.4 passengers have no revenueProcessed flag.
+    // Assume an already-BOARDED one was paid so it is never double-credited.
+    for (const p of this.data.passengers) {
+      if (p.revenueProcessed === undefined) {
+        p.revenueProcessed = p.state === "BOARDED";
+      }
+    }
   }
 
   get airport(): AirportData {

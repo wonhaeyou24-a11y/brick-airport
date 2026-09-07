@@ -123,6 +123,7 @@ export class PassengerManager {
         targetPosition: null,
         speed: 1.9 + (i % 3) * 0.15,
         colorIndex: i,
+        revenueProcessed: false,
       });
     }
   }
@@ -151,6 +152,7 @@ export class PassengerManager {
         targetPosition: null,
         speed: 2.0 + (i % 3) * 0.15,
         colorIndex: i + 2,
+        revenueProcessed: false,
       });
     }
   }

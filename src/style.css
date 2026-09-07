@@ -110,6 +110,21 @@ body {
   margin-right: 4px;
 }
 
+.hud-stat-money {
+  position: relative;
+}
+
+.hud-revenue {
+  margin-left: 6px;
+  color: var(--brick-green);
+  font-weight: 800;
+  opacity: 0;
+}
+
+.hud-revenue.fade {
+  transition: opacity 0.4s ease;
+}
+
 .hud-bottom {
   display: flex;
   align-items: flex-end;

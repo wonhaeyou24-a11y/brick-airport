@@ -33,8 +33,11 @@ export class HUD {
   private readonly aircraftEl: HTMLElement;
   private readonly gateEl: HTMLElement;
   private readonly passengerEl: HTMLElement;
+  private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
+
+  private revenueTimer = 0;
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.root = container;
@@ -46,6 +49,7 @@ export class HUD {
     this.aircraftEl = this.must(".js-aircraft");
     this.gateEl = this.must(".js-gate");
     this.passengerEl = this.must(".js-passengers");
+    this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
@@ -61,6 +65,19 @@ export class HUD {
     this.aircraftEl.textContent = String(stats.aircraftCount);
     this.gateEl.textContent = String(stats.gateCount);
     this.passengerEl.textContent = String(stats.passengerCount);
+  }
+
+  /** Brief "+$N" pop next to the money stat when ticket revenue lands (§12). */
+  showRevenue(amount: number): void {
+    this.revenueEl.textContent = `+$${amount.toLocaleString("en-US")}`;
+    this.revenueEl.classList.remove("fade");
+    this.revenueEl.style.opacity = "1"; // instant show
+
+    window.clearTimeout(this.revenueTimer);
+    this.revenueTimer = window.setTimeout(() => {
+      this.revenueEl.classList.add("fade"); // fade out only
+      this.revenueEl.style.opacity = "0";
+    }, 1200);
   }
 
   setSelection(info: SelectionInfo | null): void {
@@ -97,7 +114,10 @@ const TEMPLATE = /* html */ `
     </div>
     <div class="hud-panel hud-stats">
       <div class="hud-stat"><span>Level</span><b class="js-level">1</b></div>
-      <div class="hud-stat"><span>Money</span><b class="js-money">$1,000</b></div>
+      <div class="hud-stat hud-stat-money">
+        <span>Money</span><b class="js-money">$10,000</b>
+        <b class="hud-revenue js-revenue" aria-hidden="true"></b>
+      </div>
       <div class="hud-stat"><span>Aircraft</span><b class="js-aircraft">1</b></div>
       <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
       <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>

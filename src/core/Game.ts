@@ -19,6 +19,7 @@ import {
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
+import { Economy } from "../economy/Economy";
 import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
@@ -48,6 +49,7 @@ export class Game {
   private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
   private readonly passengerManager: PassengerManager;
+  private readonly economy: Economy;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
   private readonly buildMenu: BuildMenu;
@@ -55,8 +57,8 @@ export class Game {
 
   /** Signature of the currently displayed aircraft selection, for live HUD. */
   private shownAircraftSig = "";
-  /** Last passenger count shown in the HUD stats. */
-  private shownPassengerCount = -1;
+  /** Signature of the dynamic HUD stats (money | passenger count). */
+  private shownStatsSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -104,6 +106,8 @@ export class Game {
 
     this.passengerManager = new PassengerManager(this.state, DEFAULT_WAYPOINTS);
     this.scene.add(this.passengerManager.group);
+
+    this.economy = new Economy(this.state);
 
     this.selection = new SelectionManager(
       canvas,
@@ -394,14 +398,20 @@ export class Game {
     this.cameraController.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
+
+    // Economy: pay ticket revenue for passengers that just boarded.
+    const revenue = this.economy.settleBoarding();
+    if (revenue > 0) this.hud.showRevenue(revenue);
+
     this.refreshSelectionHud();
-    this.refreshPassengerStats();
+    this.refreshDynamicStats();
   }
 
-  private refreshPassengerStats(): void {
-    const n = this.passengerManager.count;
-    if (n === this.shownPassengerCount) return;
-    this.shownPassengerCount = n;
+  /** Refresh the top HUD stats when money or the passenger count changes. */
+  private refreshDynamicStats(): void {
+    const sig = `${this.state.airport.money}|${this.passengerManager.count}`;
+    if (sig === this.shownStatsSig) return;
+    this.shownStatsSig = sig;
     this.refreshHudStats();
   }
 
