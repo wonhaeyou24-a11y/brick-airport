@@ -1,0 +1,218 @@
+/* Brick Airport — global + HUD styles
+ * Long-term visual language: rounded corners, block-like panels, thick borders,
+ * bright toy colors. Kept intentionally light for V0.1.
+ */
+
+:root {
+  --brick-red: #e63946;
+  --brick-yellow: #ffb703;
+  --brick-blue: #219ebc;
+  --brick-sky: #8ecae6;
+  --brick-green: #2a9d8f;
+  --panel-bg: #ffffff;
+  --panel-border: #22333b;
+  --panel-text: #22333b;
+  --panel-radius: 14px;
+  --panel-shadow: 0 6px 0 rgba(34, 51, 59, 0.25);
+  --hud-gap: 12px;
+  --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--brick-sky);
+  font-family: var(--font);
+  color: var(--panel-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none; /* let the camera controller handle gestures */
+}
+
+/* ------------------------------------------------------------------ HUD --- */
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* panels re-enable pointer events individually */
+  padding: var(--hud-gap);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hud-panel {
+  pointer-events: auto;
+  background: var(--panel-bg);
+  border: 3px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 10px 14px;
+}
+
+.hud-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--hud-gap);
+}
+
+.hud-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.hud-title small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.hud-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.hud-stat span {
+  opacity: 0.6;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.hud-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--hud-gap);
+}
+
+.hud-selection {
+  min-width: 170px;
+  max-width: 60vw;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.hud-selection .sel-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+
+.hud-selection .sel-title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.hud-selection .sel-line {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.hud-selection .empty {
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.hud-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.brick-btn {
+  pointer-events: auto;
+  font-family: var(--font);
+  font-size: 18px;
+  font-weight: 800;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  color: #fff;
+  background: var(--brick-blue);
+  border: 3px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 0 rgba(34, 51, 59, 0.35);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
+}
+
+.brick-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(34, 51, 59, 0.35);
+}
+
+.brick-btn.btn-reset {
+  background: var(--brick-yellow);
+  color: var(--panel-text);
+  font-size: 14px;
+}
+
+/* --------------------------------------------------------- responsive --- */
+
+@media (max-width: 640px), (orientation: portrait) {
+  :root {
+    --hud-gap: 8px;
+  }
+
+  .hud-title {
+    font-size: 16px;
+  }
+
+  .hud-title small {
+    font-size: 10px;
+  }
+
+  .hud-stats {
+    font-size: 12px;
+    gap: 4px 10px;
+    max-width: 45vw;
+  }
+
+  .hud-bottom {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .hud-controls {
+    justify-content: flex-end;
+  }
+
+  .brick-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
