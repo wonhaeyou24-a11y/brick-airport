@@ -60,6 +60,29 @@ export type PassengerState =
 
 export type PassengerRouteType = "DEPARTURE" | "ARRIVAL";
 
+/**
+ * Flight (항공편) lifecycle — a SEPARATE concept from AircraftState (V0.6-A).
+ * One aircraft flies many flights over its life; a flight is the unit that
+ * connects an aircraft, a gate and a set of passengers for one operation.
+ *
+ *   SCHEDULED -> BOARDING -> READY -> DEPARTING -> FLYING -> ARRIVING -> COMPLETED
+ *
+ * CANCELLED is a terminal state for a flight that never departed. This enum is
+ * never merged with AircraftState — FlightLifecycle (V0.6-B) maps between them.
+ */
+export type FlightState =
+  | "SCHEDULED"
+  | "BOARDING"
+  | "READY"
+  | "DEPARTING"
+  | "FLYING"
+  | "ARRIVING"
+  | "COMPLETED"
+  | "CANCELLED";
+
+/** Flight direction — reuses the passenger route vocabulary. */
+export type FlightRouteType = PassengerRouteType;
+
 export interface AirportData {
   id: string;
   name: string;
@@ -115,6 +138,12 @@ export interface AircraftData {
   homeGateId: string | null;
   /** Max passengers this aircraft carries (drives departure spawn count). */
   capacity: number;
+  /**
+   * Flight this aircraft is currently operating, if any (V0.6-A). This is a
+   * transient link, not a history — it is cleared when the flight completes and
+   * reset when the aircraft is dispatched again. Optional for pre-V0.6 states.
+   */
+  currentFlightId?: string | null;
 }
 
 export interface PassengerData {
@@ -136,6 +165,37 @@ export interface PassengerData {
   revenueProcessed: boolean;
 }
 
+/**
+ * FlightData — one airport operation (V0.6-A). Connects an aircraft, a gate and
+ * a group of passengers. Completed flights stay in `flights[]` with
+ * state "COMPLETED" so they double as the flight history (V0.6-E).
+ *
+ * Every relation is nullable: a flight whose aircraft / gate / passengers are
+ * missing must never crash the game — it just renders as "—".
+ */
+export interface FlightData {
+  /** Flight id like "F-001". Namespaced apart from aircraft ids. */
+  id: string;
+  aircraftId: string | null;
+  gateId: string | null;
+  state: FlightState;
+  routeType: FlightRouteType;
+  /** Human-readable origin city, e.g. "SEOUL". */
+  origin: string;
+  /** Human-readable destination city, e.g. "TOKYO". */
+  destination: string;
+  /** Epoch ms the flight is scheduled for. */
+  scheduledAt: number;
+  /** Epoch ms the flight record was created. */
+  createdAt: number;
+  /** Passengers assigned to this flight. */
+  passengerIds: string[];
+  /** Epoch ms the flight completed (set once, on completion). */
+  completedAt?: number;
+  /** Ticket revenue attributed to this flight (set once, on completion). */
+  revenue?: number;
+}
+
 export interface GameStateData {
   version: string;
   airport: AirportData;
@@ -143,6 +203,8 @@ export interface GameStateData {
   gates: GateData[];
   aircraft: AircraftData[];
   passengers: PassengerData[];
+  /** All flights, past and present. COMPLETED entries are the history (V0.6-E). */
+  flights: FlightData[];
   /** Currently selected entity, for HUD display. */
   selection: {
     kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | null;
@@ -153,6 +215,11 @@ export interface GameStateData {
     hoverCell: CellCoord | null;
     selectedCell: CellCoord | null;
   };
+}
+
+/** A flight in a terminal state — COMPLETED or CANCELLED — never transitions again. */
+export function isFlightOver(state: FlightState): boolean {
+  return state === "COMPLETED" || state === "CANCELLED";
 }
 
 /** Convenience: build a BuildingData with occupiedCells filled in. */
@@ -168,7 +235,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.5.0",
+    version: "0.6.0",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -269,6 +336,7 @@ export function createInitialState(): GameStateData {
       },
     ],
     passengers: [],
+    flights: [],
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -285,6 +353,8 @@ export class GameState {
     this.data = data;
     // Forward-compat: a state saved before V0.3 has no passengers array.
     if (!this.data.passengers) this.data.passengers = [];
+    // Forward-compat: a state saved before V0.6 has no flights array.
+    if (!this.data.flights) this.data.flights = [];
     // Forward-compat: pre-V0.4 passengers have no revenueProcessed flag.
     // Assume an already-BOARDED one was paid so it is never double-credited.
     for (const p of this.data.passengers) {
@@ -472,6 +542,63 @@ export class GameState {
   areAircraftPassengersReady(aircraftId: string): boolean {
     const dep = this.getPassengersForAircraft(aircraftId, "DEPARTURE");
     return dep.length === 0 || dep.every((p) => p.state === "BOARDED");
+  }
+
+  // ---------------------------------------------------------------- flights
+
+  /** A fresh, collision-free flight id like "F-001". */
+  nextFlightId(): string {
+    let max = 0;
+    for (const f of this.data.flights) {
+      const m = /(\d+)$/.exec(f.id);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `F-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  addFlight(flight: FlightData): void {
+    this.data.flights.push(flight);
+  }
+
+  getFlight(id: string | null | undefined): FlightData | undefined {
+    if (!id) return undefined;
+    return this.data.flights.find((f) => f.id === id);
+  }
+
+  /** The flight an aircraft is currently operating, if any. */
+  getFlightByAircraft(aircraftId: string): FlightData | undefined {
+    const ac = this.getAircraft(aircraftId);
+    if (ac?.currentFlightId) {
+      const byLink = this.getFlight(ac.currentFlightId);
+      if (byLink) return byLink;
+    }
+    return this.data.flights.find(
+      (f) => f.aircraftId === aircraftId && !isFlightOver(f.state),
+    );
+  }
+
+  /** Shallow-merge a patch into a flight. No-op if the id is unknown. */
+  updateFlight(id: string, patch: Partial<FlightData>): void {
+    const flight = this.getFlight(id);
+    if (!flight) return;
+    Object.assign(flight, patch);
+  }
+
+  /**
+   * Mark a flight COMPLETED (V0.6-A / V0.6-E). Idempotent: re-completing a
+   * finished flight does nothing, so revenue is never counted twice. Clears the
+   * aircraft's transient currentFlightId link so the plane can fly again.
+   */
+  completeFlight(id: string, revenue?: number): void {
+    const flight = this.getFlight(id);
+    if (!flight || isFlightOver(flight.state)) return;
+    flight.state = "COMPLETED";
+    flight.completedAt = Date.now();
+    if (revenue !== undefined) flight.revenue = revenue;
+    if (flight.aircraftId) {
+      const ac = this.getAircraft(flight.aircraftId);
+      if (ac && ac.currentFlightId === id) ac.currentFlightId = null;
+    }
   }
 
   setSelection(
