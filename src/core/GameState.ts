@@ -168,7 +168,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.4.3",
+    version: "0.4.4",
     airport: {
       id: "airport-1",
       name: "My Airport",

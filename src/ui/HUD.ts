@@ -20,6 +20,25 @@ export interface SelectionInfo {
   lines?: string[];
 }
 
+/**
+ * Airport-wide statistics shown in the bottom-left panel while nothing is
+ * selected. All values are read from GameState by Game; the HUD just renders.
+ */
+export interface AirportStats {
+  /** airport.totalFlights ?? 0 */
+  flights: number;
+  /** airport.totalPassengers ?? 0 */
+  passengers: number;
+  /** airport.totalRevenue ?? 0 */
+  revenue: number;
+  /** airport.money (same value as the top HUD) */
+  balance: number;
+  /** totalPassengers / totalFlights, 0 when no flights yet */
+  avgPaxPerFlight: number;
+  /** boarded departure pax / departure pax * 100, rounded; 0 when none */
+  boardingRate: number;
+}
+
 export interface HudCallbacks {
   onZoomIn(): void;
   onZoomOut(): void;
@@ -38,6 +57,13 @@ export class HUD {
   private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
+  private readonly statisticsEl: HTMLElement;
+  private readonly statFlightsEl: HTMLElement;
+  private readonly statPassengersEl: HTMLElement;
+  private readonly statRevenueEl: HTMLElement;
+  private readonly statBalanceEl: HTMLElement;
+  private readonly statAvgEl: HTMLElement;
+  private readonly statBoardingEl: HTMLElement;
 
   private revenueTimer = 0;
 
@@ -54,6 +80,13 @@ export class HUD {
     this.flightEl = this.must(".js-flights");
     this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
+    this.statisticsEl = this.must(".js-statistics");
+    this.statFlightsEl = this.must(".js-stat-flights");
+    this.statPassengersEl = this.must(".js-stat-passengers");
+    this.statRevenueEl = this.must(".js-stat-revenue");
+    this.statBalanceEl = this.must(".js-stat-balance");
+    this.statAvgEl = this.must(".js-stat-avg");
+    this.statBoardingEl = this.must(".js-stat-boarding");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -84,17 +117,31 @@ export class HUD {
     }, 1200);
   }
 
+  /**
+   * Show the SELECTED panel (info) or, when nothing is selected (null), fall
+   * back to the Airport Statistics panel — the two swap in the same slot.
+   */
   setSelection(info: SelectionInfo | null): void {
-    const parts = ['<span class="sel-label">SELECTED</span>'];
     if (info) {
+      const parts = ['<span class="sel-label">SELECTED</span>'];
       parts.push(`<b class="sel-title">${escapeHtml(info.title)}</b>`);
       for (const line of info.lines ?? []) {
         parts.push(`<span class="sel-line">${escapeHtml(line)}</span>`);
       }
-    } else {
-      parts.push('<em class="empty">Nothing</em>');
+      this.selectionEl.innerHTML = parts.join("");
     }
-    this.selectionEl.innerHTML = parts.join("");
+    this.selectionEl.hidden = info === null;
+    this.statisticsEl.hidden = info !== null;
+  }
+
+  /** Update the Airport Statistics card values (call only when they change). */
+  setStatistics(s: AirportStats): void {
+    this.statFlightsEl.textContent = String(s.flights);
+    this.statPassengersEl.textContent = String(s.passengers);
+    this.statRevenueEl.textContent = `$${s.revenue.toLocaleString("en-US")}`;
+    this.statBalanceEl.textContent = `$${s.balance.toLocaleString("en-US")}`;
+    this.statAvgEl.textContent = s.avgPaxPerFlight.toFixed(1);
+    this.statBoardingEl.textContent = `${s.boardingRate}%`;
   }
 
   private must(selector: string): HTMLElement {
@@ -130,8 +177,21 @@ const TEMPLATE = /* html */ `
   </div>
 
   <div class="hud-bottom">
-    <div class="hud-panel hud-selection js-selection">
-      <span class="sel-label">SELECTED</span><em class="empty">Nothing</em>
+    <div class="hud-panel hud-context">
+      <div class="hud-statistics js-statistics">
+        <div class="stat-panel-title">Airport Statistics</div>
+        <div class="statistics-grid">
+          <div class="stat-card"><span>Flights</span><strong class="js-stat-flights">0</strong></div>
+          <div class="stat-card"><span>Passengers</span><strong class="js-stat-passengers">0</strong></div>
+          <div class="stat-card"><span>Revenue</span><strong class="js-stat-revenue">$0</strong></div>
+          <div class="stat-card"><span>Balance</span><strong class="js-stat-balance">$10,000</strong></div>
+          <div class="stat-card"><span>Avg Pax / Flight</span><strong class="js-stat-avg">0.0</strong></div>
+          <div class="stat-card"><span>Boarding Rate</span><strong class="js-stat-boarding">0%</strong></div>
+        </div>
+      </div>
+      <div class="hud-selection js-selection" hidden>
+        <span class="sel-label">SELECTED</span><em class="empty">Nothing</em>
+      </div>
     </div>
     <div class="hud-controls">
       <button class="brick-btn btn-reset js-grid" title="Toggle grid">GRID</button>

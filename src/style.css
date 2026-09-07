@@ -132,14 +132,51 @@ body {
   gap: var(--hud-gap);
 }
 
+.hud-context {
+  min-width: 190px;
+  max-width: 62vw;
+}
+
 .hud-selection {
-  min-width: 170px;
-  max-width: 60vw;
   font-size: 14px;
   font-weight: 700;
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/* -------------------------------------------------- statistics panel --- */
+
+.stat-panel-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 6px;
+}
+
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  gap: 6px 14px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.stat-card span {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.55;
+}
+
+.stat-card strong {
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .hud-selection .sel-label {
@@ -292,7 +329,7 @@ body {
 
   .build-menu {
     top: auto;
-    bottom: 150px; /* keep clear of the bottom HUD row */
+    bottom: 240px; /* keep clear of the bottom HUD stack (stats + controls) */
     transform: none;
   }
 
@@ -300,5 +337,18 @@ body {
   .build-cancel {
     min-width: 132px;
     min-height: 48px;
+  }
+
+  .hud-context {
+    max-width: none;
+  }
+
+  .statistics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 10px;
+  }
+
+  .stat-card strong {
+    font-size: 14px;
   }
 }

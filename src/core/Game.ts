@@ -61,8 +61,10 @@ export class Game {
 
   /** Signature of the currently displayed aircraft selection, for live HUD. */
   private shownAircraftSig = "";
-  /** Signature of the dynamic HUD stats (money | passenger count). */
+  /** Signature of the top-bar dynamic HUD stats. */
   private shownStatsSig = "";
+  /** Signature of the Airport Statistics panel. */
+  private shownStatisticsSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -139,6 +141,7 @@ export class Game {
         this.world.setGridVisible(!this.world.isGridVisible()),
     });
     this.refreshHudStats();
+    this.refreshStatistics();
 
     this.buildMenu = new BuildMenu(hudContainer, {
       onSelectType: (type) => this.buildController.begin(type),
@@ -458,6 +461,7 @@ export class Game {
 
     this.refreshSelectionHud();
     this.refreshDynamicStats();
+    this.refreshStatistics();
   }
 
   /** Refresh the top HUD stats when a tracked value changes. */
@@ -467,6 +471,44 @@ export class Game {
     if (sig === this.shownStatsSig) return;
     this.shownStatsSig = sig;
     this.refreshHudStats();
+  }
+
+  /**
+   * Recompute the Airport Statistics panel from GameState. Cumulative values
+   * come straight from `airport.*`; the two derived ones are computed here.
+   * DOM is only touched when the signature changes (perf §31).
+   */
+  private refreshStatistics(): void {
+    const a = this.state.airport;
+    const flights = a.totalFlights ?? 0;
+    const passengers = a.totalPassengers ?? 0;
+    const revenue = a.totalRevenue ?? 0;
+    const balance = a.money;
+    const avgPaxPerFlight = flights > 0 ? passengers / flights : 0;
+
+    let departureTotal = 0;
+    let departureBoarded = 0;
+    for (const p of this.state.data.passengers) {
+      if (p.routeType !== "DEPARTURE") continue;
+      departureTotal += 1;
+      if (p.state === "BOARDED") departureBoarded += 1;
+    }
+    const boardingRate =
+      departureTotal > 0
+        ? Math.round((departureBoarded / departureTotal) * 100)
+        : 0;
+
+    const sig = `${flights}|${passengers}|${revenue}|${balance}|${avgPaxPerFlight.toFixed(1)}|${boardingRate}`;
+    if (sig === this.shownStatisticsSig) return;
+    this.shownStatisticsSig = sig;
+    this.hud.setStatistics({
+      flights,
+      passengers,
+      revenue,
+      balance,
+      avgPaxPerFlight,
+      boardingRate,
+    });
   }
 
   private render(): void {
