@@ -11,6 +11,7 @@ export interface HudStats {
   aircraftCount: number;
   gateCount: number;
   passengerCount: number;
+  flightCount: number;
 }
 
 /** What to show in the "SELECTED" panel. */
@@ -33,6 +34,7 @@ export class HUD {
   private readonly aircraftEl: HTMLElement;
   private readonly gateEl: HTMLElement;
   private readonly passengerEl: HTMLElement;
+  private readonly flightEl: HTMLElement;
   private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
@@ -49,6 +51,7 @@ export class HUD {
     this.aircraftEl = this.must(".js-aircraft");
     this.gateEl = this.must(".js-gate");
     this.passengerEl = this.must(".js-passengers");
+    this.flightEl = this.must(".js-flights");
     this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
 
@@ -65,6 +68,7 @@ export class HUD {
     this.aircraftEl.textContent = String(stats.aircraftCount);
     this.gateEl.textContent = String(stats.gateCount);
     this.passengerEl.textContent = String(stats.passengerCount);
+    this.flightEl.textContent = String(stats.flightCount);
   }
 
   /** Brief "+$N" pop next to the money stat when ticket revenue lands (§12). */
@@ -121,6 +125,7 @@ const TEMPLATE = /* html */ `
       <div class="hud-stat"><span>Aircraft</span><b class="js-aircraft">1</b></div>
       <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
       <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>
+      <div class="hud-stat"><span>Flights</span><b class="js-flights">0</b></div>
     </div>
   </div>
 

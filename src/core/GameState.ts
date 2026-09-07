@@ -64,6 +64,8 @@ export interface AirportData {
   totalRevenue?: number;
   /** Lifetime passengers that have boarded. Optional for pre-V0.4 states. */
   totalPassengers?: number;
+  /** Lifetime flight departures. Optional for pre-V0.4.1 states. */
+  totalFlights?: number;
 }
 
 export interface BuildingData {
@@ -160,7 +162,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.4.0",
+    version: "0.4.1",
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -169,6 +171,7 @@ export function createInitialState(): GameStateData {
       reputation: 0,
       totalRevenue: 0,
       totalPassengers: 0,
+      totalFlights: 0,
     },
     buildings: [
       makeBuilding({
@@ -291,6 +294,26 @@ export class GameState {
 
   getAircraft(id: string): AircraftData | undefined {
     return this.data.aircraft.find((a) => a.id === id);
+  }
+
+  /** A fresh, collision-free aircraft id like "aircraft-3". */
+  nextAircraftId(): string {
+    let max = 0;
+    for (const a of this.data.aircraft) {
+      const m = /(\d+)$/.exec(a.id);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `aircraft-${max + 1}`;
+  }
+
+  addAircraft(data: AircraftData): void {
+    this.data.aircraft.push(data);
+  }
+
+  /** One-shot: call when an aircraft actually starts its takeoff roll. */
+  recordFlightDeparture(): void {
+    const a = this.data.airport;
+    a.totalFlights = (a.totalFlights ?? 0) + 1;
   }
 
   getBuilding(id: string): BuildingData | undefined {

@@ -17,6 +17,7 @@ import {
   type PlacementValidity,
 } from "../construction/PlacementSystem";
 import { AircraftManager } from "../aircraft/AircraftManager";
+import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
 import { Economy } from "../economy/Economy";
@@ -48,6 +49,7 @@ export class Game {
   private readonly buildingPreview: BuildingPreview;
   private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
+  private readonly flightScheduler: FlightScheduler;
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
   private readonly selection: SelectionManager;
@@ -103,6 +105,10 @@ export class Game {
 
     this.aircraftManager = new AircraftManager(this.state);
     this.scene.add(this.aircraftManager.group);
+
+    this.flightScheduler = new FlightScheduler(this.state, {
+      spawnAircraft: (data) => this.aircraftManager.spawn(data),
+    });
 
     this.passengerManager = new PassengerManager(this.state, DEFAULT_WAYPOINTS);
     this.scene.add(this.passengerManager.group);
@@ -391,11 +397,13 @@ export class Game {
       aircraftCount: this.state.data.aircraft.length,
       gateCount: this.state.data.gates.length,
       passengerCount: this.state.data.passengers.length,
+      flightCount: airport.totalFlights ?? 0,
     });
   }
 
   private update(deltaTime: number): void {
     this.cameraController.update(deltaTime);
+    this.flightScheduler.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
 
@@ -407,9 +415,10 @@ export class Game {
     this.refreshDynamicStats();
   }
 
-  /** Refresh the top HUD stats when money or the passenger count changes. */
+  /** Refresh the top HUD stats when a tracked value changes. */
   private refreshDynamicStats(): void {
-    const sig = `${this.state.airport.money}|${this.passengerManager.count}`;
+    const a = this.state.airport;
+    const sig = `${a.money}|${this.passengerManager.count}|${this.aircraftManager.count}|${a.totalFlights ?? 0}`;
     if (sig === this.shownStatsSig) return;
     this.shownStatsSig = sig;
     this.refreshHudStats();

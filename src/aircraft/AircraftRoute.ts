@@ -42,6 +42,8 @@ const HOLD_POINTS: readonly [number, number, number][] = [
   [20, 14, 32],
 ];
 
+export type RouteStart = "PARKED" | "ARRIVING";
+
 export class AircraftRoute {
   private legs: Leg[] = [];
   private legIndex = 0;
@@ -53,11 +55,26 @@ export class AircraftRoute {
   constructor(
     private readonly craft: Aircraft,
     private readonly state: GameState,
-    /** 0-based fleet index — staggers departures and spreads air routes. */
+    /** Fleet index — staggers departures and spreads air routes. */
     private readonly flightIndex: number,
+    /** "PARKED" = already at a gate (default); "ARRIVING" = inbound, airborne. */
+    start: RouteStart = "PARKED",
   ) {
-    this.dwell = BASE_DWELL + flightIndex * 5;
+    this.dwell = BASE_DWELL + (flightIndex % 3) * 3;
     this.dwellTimer = this.dwell;
+    if (start === "ARRIVING") this.startAsArrival();
+  }
+
+  /** Begin a scheduled arrival on the LANDING leg (spec §11, §12). */
+  private startAsArrival(): void {
+    const gate = this.craft.data.homeGateId
+      ? this.state.getGate(this.craft.data.homeGateId)
+      : null;
+    const origin = gate
+      ? new THREE.Vector3(gate.parkPosition.x, 0, gate.parkPosition.z)
+      : new THREE.Vector3(1, 0, 7);
+    this.legs = this.buildLegs(origin);
+    this.enterLeg(LEG_LANDING);
   }
 
   tick(deltaTime: number): void {
@@ -133,9 +150,19 @@ export class AircraftRoute {
     if (data.homeGateId) this.state.occupyGate(data.homeGateId, data.id);
   }
 
-  /** Claim an AVAILABLE gate for the inbound taxi. Returns false if none. */
+  /**
+   * Pick the gate for the inbound taxi. Honours a gate already reserved for
+   * this aircraft (a scheduled arrival — FlightScheduler set homeGateId +
+   * occupied it); otherwise claims any AVAILABLE gate. Returns false if none.
+   */
   private assignGate(taxiInLeg: Leg): boolean {
-    const gate = this.state.findAvailableGate();
+    const reserved = this.craft.data.homeGateId
+      ? this.state.getGate(this.craft.data.homeGateId)
+      : null;
+    const gate =
+      reserved && reserved.aircraftId === this.craft.data.id
+        ? reserved
+        : this.state.findAvailableGate();
     if (!gate) return false;
 
     this.state.occupyGate(gate.id, this.craft.data.id);
