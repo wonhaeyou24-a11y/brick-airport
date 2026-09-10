@@ -37,6 +37,10 @@ import {
 import { computeAirportLevel } from "../progression/AirportProgression";
 import { OperationsManager } from "../operations/OperationsManager";
 import { GroundOperationManager } from "../operations/GroundOperationManager";
+import {
+  TURNAROUND_SEQUENCE,
+  operationGlyph,
+} from "../operations/GroundOperation";
 import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
@@ -96,6 +100,8 @@ export class Game {
   private shownHistorySig = "";
   /** Signature of the Operations metrics row (V0.7). */
   private shownOperationsSig = "";
+  /** Signature of the Ground Operations panel (V0.8-E). */
+  private shownGroundOpsSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -440,6 +446,9 @@ export class Game {
           lines.push(`Passengers: ${board.boarded} / ${board.total}`);
         }
         if (flight) lines.push(flightProgressLine(flight.state));
+        if (flight) {
+          for (const line of this.groundOpChecklist(flight.id)) lines.push(line);
+        }
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -510,6 +519,10 @@ export class Game {
         const gateFlight = this.activeFlightForGate(gate.id);
         lines.push(`Flight: ${gateFlight ? gateFlight.id : "NONE"}`);
         if (gateFlight) lines.push(`Route: ${flightRoute(gateFlight)}`);
+        if (gateFlight) {
+          const svc = this.groundServiceLabel(gateFlight.id);
+          if (svc) lines.push(`Ground Service: ${svc}`);
+        }
       }
       return {
         title: gate ? `Gate ${gateName(gate.id)}` : "Gate",
@@ -536,6 +549,37 @@ export class Game {
       return { title: label, lines: [`Type: ${label}`, `Level: ${b.level}`] };
     }
     return { title: s.getSelectionLabel() };
+  }
+
+  /** Compact per-task state string for a flight's turnaround, for HUD signatures. */
+  private groundOpSig(flightId: string): string {
+    return this.state
+      .getGroundOperationsForFlight(flightId)
+      .map((o) => o.state[0])
+      .join("");
+  }
+
+  /** "Ground Operations" checklist lines for a flight's turnaround (spec §42). */
+  private groundOpChecklist(flightId: string): string[] {
+    const ops = this.state.getGroundOperationsForFlight(flightId);
+    if (ops.length === 0) return [];
+    const lines = ["Ground Operations"];
+    for (const type of TURNAROUND_SEQUENCE) {
+      const op = ops.find((o) => o.type === type);
+      if (op) lines.push(`  ${operationGlyph(op.state)} ${opLabel(type)}`);
+    }
+    return lines;
+  }
+
+  /** "REFUELING" (current task) or "READY" for a gate's turnaround (spec §43). */
+  private groundServiceLabel(flightId: string): string | null {
+    const ops = this.state.getGroundOperationsForFlight(flightId);
+    if (ops.length === 0) return null;
+    if (ops.every((o) => o.state === "COMPLETED")) return "READY";
+    const current = ops.find(
+      (o) => o.state !== "COMPLETED" && o.state !== "CANCELLED",
+    );
+    return current ? opLabel(current.type) : "—";
   }
 
   /** The active (non-finished) flight tied to a gate, via its aircraft or gateId. */
@@ -576,7 +620,8 @@ export class Game {
       if (a) {
         const b = this.state.getAircraftBoarding(a.id);
         const f = this.state.getFlightByAircraft(a.id);
-        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}:${f?.delayed ? "D" : "-"}`;
+        const gopSig = f ? this.groundOpSig(f.id) : "-";
+        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}:${f?.delayed ? "D" : "-"}|${gopSig}`;
       }
     } else if (sel.selectionKind === "PASSENGER") {
       const p = this.state.getPassenger(sel.id);
@@ -597,7 +642,8 @@ export class Game {
         if (gate) {
           const b = this.state.getGateBoarding(gate.id);
           const f = this.activeFlightForGate(gate.id);
-          sig = `${gate.status}|${gate.aircraftId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
+          const gopSig = f ? this.groundOpSig(f.id) : "-";
+          sig = `${gate.status}|${gate.aircraftId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}|${gopSig}`;
         }
       }
     }
@@ -652,7 +698,26 @@ export class Game {
     this.refreshStatistics();
     this.refreshOperations();
     this.refreshFlightHistory();
+    this.refreshGroundOps();
     this.refreshBuildMenu();
+  }
+
+  /**
+   * Ground Operations panel (V0.8-E) — the task being worked for each active
+   * turnaround plus the most recent completions. DOM only touched on change.
+   */
+  private refreshGroundOps(): void {
+    const rows = this.groundOps.recentActivity(6);
+    const sig = rows.map((r) => `${r.flightId}:${r.type}:${r.state}`).join(",");
+    if (sig === this.shownGroundOpsSig) return;
+    this.shownGroundOpsSig = sig;
+    this.hud.setGroundOperations(
+      rows.map((r) => ({
+        flightId: r.flightId,
+        task: opLabel(r.type),
+        state: r.state,
+      })),
+    );
   }
 
   /**

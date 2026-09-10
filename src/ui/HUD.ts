@@ -48,6 +48,13 @@ export interface FlightHistoryEntry {
   satisfaction?: number;
 }
 
+/** One row of the Ground Operations panel (V0.8-E). */
+export interface GroundOpRow {
+  flightId: string;
+  task: string;
+  state: string;
+}
+
 /** Live operations metrics shown under the Airport Statistics grid (V0.7 / V0.8). */
 export interface OperationsInfo {
   serviceScore: number;
@@ -91,6 +98,8 @@ export class HUD {
   private readonly noticeEl: HTMLElement;
   private readonly flightHistoryEl: HTMLElement;
   private readonly flightHistoryListEl: HTMLElement;
+  private readonly groundOpsEl: HTMLElement;
+  private readonly groundOpsListEl: HTMLElement;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -124,6 +133,8 @@ export class HUD {
     this.noticeEl = this.must(".js-notice");
     this.flightHistoryEl = this.must(".js-flight-history");
     this.flightHistoryListEl = this.must(".js-flight-history-list");
+    this.groundOpsEl = this.must(".js-ground-ops");
+    this.groundOpsListEl = this.must(".js-ground-ops-list");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -249,6 +260,30 @@ export class HUD {
       .join("");
   }
 
+  /**
+   * Render the Ground Operations panel (V0.8-E, spec §45). A separate panel;
+   * hidden until the first turnaround task appears.
+   */
+  setGroundOperations(rows: GroundOpRow[]): void {
+    if (rows.length === 0) {
+      this.groundOpsEl.hidden = true;
+      return;
+    }
+    this.groundOpsEl.hidden = false;
+    this.groundOpsListEl.innerHTML = rows
+      .map(
+        (r) =>
+          `<div class="gop-row">` +
+          `<span class="gop-flight">${escapeHtml(r.flightId)}</span>` +
+          `<span class="gop-task">${escapeHtml(r.task)}</span>` +
+          `<span class="gop-state gop-${r.state.toLowerCase().replace(/_/g, "-")}">${escapeHtml(
+            r.state.replace(/_/g, " "),
+          )}</span>` +
+          `</div>`,
+      )
+      .join("");
+  }
+
   private must(selector: string): HTMLElement {
     const el = this.root.querySelector<HTMLElement>(selector);
     if (!el) throw new Error(`HUD: missing element "${selector}"`);
@@ -287,6 +322,10 @@ const TEMPLATE = /* html */ `
     <div class="hud-panel flight-history js-flight-history" hidden>
       <div class="stat-panel-title">Recent Flights</div>
       <div class="flight-history-list js-flight-history-list"></div>
+    </div>
+    <div class="hud-panel ground-ops js-ground-ops" hidden>
+      <div class="stat-panel-title">Ground Operations</div>
+      <div class="ground-ops-list js-ground-ops-list"></div>
     </div>
   </div>
 

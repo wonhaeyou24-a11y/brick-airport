@@ -1,4 +1,9 @@
-import type { GameState, GroundOperationData } from "../core/GameState";
+import type {
+  GameState,
+  GroundOperationData,
+  GroundOperationState,
+  GroundOperationType,
+} from "../core/GameState";
 import { isFlightOver, isServiceFacility } from "../core/GameState";
 import type { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
 import {
@@ -16,6 +21,13 @@ import type { GroundVehicleType } from "../core/GameState";
 export interface GroundOperationsTick {
   /** Short strings for the HUD notice system (spec §47). */
   notices: string[];
+}
+
+/** One row of the Ground Operations HUD panel (spec §45). */
+export interface GroundOpActivity {
+  flightId: string;
+  type: GroundOperationType;
+  state: GroundOperationState;
 }
 
 const OP_ICON: Record<string, string> = {
@@ -71,6 +83,36 @@ export class GroundOperationManager {
     this.announceReady(notices);
     this.pruneFinished();
     return { notices };
+  }
+
+  /**
+   * A curated feed for the Ground Operations HUD panel (spec §45): the task
+   * currently being worked for each active turnaround, then the most recently
+   * completed tasks, newest first, capped at `limit`.
+   */
+  recentActivity(limit = 6): GroundOpActivity[] {
+    const rows: GroundOpActivity[] = [];
+
+    for (const flightId of this.turnaroundStarted) {
+      const cur = nextPendingOperation(
+        this.state.getGroundOperationsForFlight(flightId),
+      );
+      if (cur) rows.push({ flightId, type: cur.type, state: cur.state });
+    }
+
+    const done = this.state.data.groundOperations
+      .filter((o) => o.state === "COMPLETED")
+      .sort(
+        (a, b) =>
+          (b.completedAt ?? 0) - (a.completedAt ?? 0) ||
+          b.id.localeCompare(a.id),
+      );
+    for (const op of done) {
+      if (rows.length >= limit) break;
+      rows.push({ flightId: op.flightId, type: op.type, state: op.state });
+    }
+
+    return rows.slice(0, limit);
   }
 
   // --------------------------------------------------------------- internals

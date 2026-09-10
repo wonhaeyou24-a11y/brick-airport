@@ -157,7 +157,9 @@ body {
 
 .hud-mid {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: var(--hud-gap);
 }
 
 .hud-bottom {
@@ -207,6 +209,55 @@ body {
 .flight-row .fr-sat {
   color: var(--brick-yellow);
   font-weight: 800;
+}
+
+/* ------------------------------------------------- ground operations --- */
+
+.ground-ops {
+  max-width: 340px;
+  font-size: 12px;
+}
+
+.ground-ops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gop-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.gop-row .gop-flight {
+  font-weight: 800;
+  min-width: 44px;
+}
+
+.gop-row .gop-task {
+  flex: 1;
+  opacity: 0.8;
+}
+
+.gop-row .gop-state {
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.gop-row .gop-in-progress {
+  color: var(--brick-blue);
+}
+
+.gop-row .gop-completed {
+  color: var(--brick-green);
+}
+
+.gop-row .gop-pending,
+.gop-row .gop-assigned {
+  color: var(--brick-yellow);
 }
 
 .hud-context {
@@ -506,5 +557,33 @@ body {
 
   .flight-row .fr-route {
     flex: none;
+  }
+
+  .ground-ops {
+    max-width: 52vw;
+  }
+
+  .gop-row {
+    flex-direction: column;
+    gap: 0;
+    align-items: flex-start;
+    white-space: normal;
+  }
+
+  .gop-row .gop-task {
+    flex: none;
+  }
+
+  /* Cap the feed on the small screen (§46). */
+  .ground-ops-list .gop-row:nth-child(n + 5) {
+    display: none;
+  }
+
+  /* Keep the middle info panels from pushing the bottom HUD off-screen (§67). */
+  .hud-mid {
+    max-height: 34vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    pointer-events: auto;
   }
 }
