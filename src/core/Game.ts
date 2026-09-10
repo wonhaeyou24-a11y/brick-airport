@@ -39,6 +39,7 @@ import { OperationsManager } from "../operations/OperationsManager";
 import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
+import { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
 import { Economy } from "../economy/Economy";
@@ -71,6 +72,7 @@ export class Game {
   private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
   private readonly flightScheduler: FlightScheduler;
+  private readonly vehicleManager: GroundVehicleManager;
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
   private readonly operations: OperationsManager;
@@ -138,6 +140,9 @@ export class Game {
 
     this.aircraftManager = new AircraftManager(this.state);
     this.scene.add(this.aircraftManager.group);
+
+    this.vehicleManager = new GroundVehicleManager(this.state);
+    this.scene.add(this.vehicleManager.group);
 
     this.operations = new OperationsManager(this.state);
 
@@ -210,6 +215,7 @@ export class Game {
     this.selection.dispose();
     this.cameraController.dispose();
     this.passengerManager.dispose();
+    this.vehicleManager.dispose();
     this.aircraftManager.dispose();
     this.buildingPreview.dispose();
     this.gridCursor.dispose();
@@ -320,6 +326,7 @@ export class Game {
     return [
       ...this.world.selectables,
       ...this.aircraftManager.selectables,
+      ...this.vehicleManager.selectables,
       ...this.passengerManager.selectables,
     ];
   }
@@ -430,6 +437,25 @@ export class Game {
           lines.push(`Passengers: ${board.boarded} / ${board.total}`);
         }
         if (flight) lines.push(flightProgressLine(flight.state));
+      }
+      return { title: s.getSelectionLabel(), lines };
+    }
+
+    if (s.selectionKind === "GROUND_VEHICLE") {
+      const v = this.state.getGroundVehicle(s.id);
+      const lines: string[] = [];
+      if (v) {
+        lines.push(`Status: ${v.state}`);
+        const op = this.state.getGroundOperation(v.operationId);
+        if (op) {
+          const flight = this.state.getFlight(op.flightId);
+          lines.push(`Operation: ${opLabel(op.type)}`);
+          lines.push(`Flight: ${flight ? flight.id : "—"}`);
+          lines.push(`Aircraft: ${op.aircraftId}`);
+          lines.push(`Gate: ${gateName(op.gateId)}`);
+        } else {
+          lines.push("Operation: —");
+        }
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -555,6 +581,12 @@ export class Game {
         const f = this.state.getFlight(p.flightId);
         sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}:${f?.delayed ? "D" : "-"}|${p.satisfaction ?? "-"}`;
       }
+    } else if (sel.selectionKind === "GROUND_VEHICLE") {
+      const v = this.state.getGroundVehicle(sel.id);
+      if (v) {
+        const op = this.state.getGroundOperation(v.operationId);
+        sig = `${v.state}|${op?.id ?? "-"}:${op?.type ?? "-"}:${op?.state ?? "-"}`;
+      }
     } else {
       const building = this.state.getBuilding(sel.id);
       if (building?.type === "GATE") {
@@ -590,6 +622,7 @@ export class Game {
     this.flightScheduler.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
+    this.vehicleManager.update(deltaTime);
 
     // Derive each gate's operational status from the aircraft + passengers.
     this.gateStatus.update(deltaTime);
@@ -793,6 +826,15 @@ function flightProgressLine(state: FlightState): string {
     i < filled ? "●" : "○",
   ).join("");
   return `Progress: ${dots}`;
+}
+
+/** "BOARDING_SERVICE" -> "Boarding Service" */
+function opLabel(type: string): string {
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 /** "gate-1" -> "G-01", "gate-004" -> "G-04" */

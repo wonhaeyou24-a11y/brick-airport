@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { GameState, BuildingData } from "../core/GameState";
 import { Ground } from "./Ground";
 import { Grid } from "./Grid";
+import { ServiceRoad } from "./ServiceRoad";
 import { disposePaletteCache } from "./materials";
 import { Building } from "../buildings/Building";
 import { Runway } from "../buildings/Runway";
@@ -20,6 +21,7 @@ export class AirportWorld {
 
   private readonly ground: Ground;
   private readonly grid: Grid;
+  private readonly serviceRoad: ServiceRoad;
   private readonly buildings: Building[] = [];
 
   constructor(state: GameState) {
@@ -31,6 +33,9 @@ export class AirportWorld {
 
     this.grid = new Grid();
     this.group.add(this.grid.object);
+
+    this.serviceRoad = new ServiceRoad();
+    this.group.add(this.serviceRoad.object);
 
     for (const data of state.data.buildings) {
       const building = createBuilding(data);
@@ -68,6 +73,7 @@ export class AirportWorld {
   dispose(): void {
     for (const b of this.buildings) b.dispose();
     this.buildings.length = 0;
+    this.serviceRoad.dispose();
     this.grid.dispose();
     this.ground.dispose();
     disposePaletteCache();

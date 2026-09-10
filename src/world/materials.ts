@@ -46,6 +46,13 @@ export const COLORS = {
   aircraftWing: 0xd7dde2,
   aircraftTail: 0xe63946,
   aircraftCockpit: 0x22333b,
+  // Ground service vehicles (V0.8-B) — one toy colour each.
+  vehicleBaggage: 0xf4a259,
+  vehicleCleaning: 0x4cc9a4,
+  vehicleFuel: 0xd7263d,
+  vehicleService: 0x3a86c8,
+  vehicleCab: 0x2b2d42,
+  serviceRoad: 0x6b7079,
 } as const;
 
 export function disposePaletteCache(): void {

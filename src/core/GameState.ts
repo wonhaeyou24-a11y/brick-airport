@@ -161,6 +161,40 @@ export function isGroundOperationOver(state: GroundOperationState): boolean {
 }
 
 /**
+ * Ground service vehicle (V0.8-B). Its own state machine — NOT merged with
+ * GroundOperationState (spec §17): the vehicle describes where the truck IS,
+ * the operation describes how the task is GOING.
+ *
+ *   IDLE -> MOVING -> WORKING -> RETURNING -> IDLE
+ */
+export type GroundVehicleType =
+  | "BAGGAGE_CART"
+  | "CLEANING_VEHICLE"
+  | "FUEL_TRUCK"
+  | "SERVICE_VEHICLE";
+
+export type GroundVehicleState = "IDLE" | "MOVING" | "WORKING" | "RETURNING";
+
+export interface GroundVehicleData {
+  /** Vehicle id like "veh-001". */
+  id: string;
+  type: GroundVehicleType;
+  state: GroundVehicleState;
+  /** Current world position (y is always 0). */
+  position: Vec3;
+  /** Where it is driving toward, or null when parked / working. */
+  targetPosition: Vec3 | null;
+  /** The ground operation it is currently serving, if any. */
+  operationId?: string | null;
+  /** Concurrent operations it can handle — 1 for now (spec §37). */
+  capacity: number;
+  /** Depot slot it returns to when idle. */
+  homePosition: Vec3;
+  /** Units per second. */
+  speed: number;
+}
+
+/**
  * Live airport operating metrics (V0.7-A). Separate from the lifetime
  * accumulators (`totalRevenue` etc.) and from `reputation` — these describe the
  * airport's CURRENT service level, not its history:
@@ -341,6 +375,8 @@ export interface GameStateData {
   flights: FlightData[];
   /** All turnaround ground operations, past and present (V0.8-A). */
   groundOperations: GroundOperationData[];
+  /** The ground service vehicle fleet (V0.8-B). */
+  groundVehicles: GroundVehicleData[];
   /** Currently selected entity, for HUD display. */
   selection: {
     kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | "GROUND_VEHICLE" | null;
@@ -356,6 +392,39 @@ export interface GameStateData {
 /** A flight in a terminal state — COMPLETED or CANCELLED — never transitions again. */
 export function isFlightOver(state: FlightState): boolean {
   return state === "COMPLETED" || state === "CANCELLED";
+}
+
+/**
+ * The starting ground-service fleet — one of each type (spec §18), lined up in
+ * the depot on the ramp side of the apron. World layout only; the operations
+ * layer decides what they do.
+ */
+export function defaultGroundVehicles(): GroundVehicleData[] {
+  const types: GroundVehicleType[] = [
+    "BAGGAGE_CART",
+    "CLEANING_VEHICLE",
+    "FUEL_TRUCK",
+    "SERVICE_VEHICLE",
+  ];
+  return types.map((type, i) => {
+    // A compact 2×2 depot just west of the runway, clear of the apron.
+    const home: Vec3 = {
+      x: -23 + (i % 2) * 1.9,
+      y: 0,
+      z: 1 + Math.floor(i / 2) * 1.7,
+    };
+    return {
+      id: `veh-${String(i + 1).padStart(3, "0")}`,
+      type,
+      state: "IDLE" as const,
+      position: { ...home },
+      targetPosition: null,
+      operationId: null,
+      capacity: 1,
+      homePosition: { ...home },
+      speed: 9,
+    };
+  });
 }
 
 /** Convenience: build a BuildingData with occupiedCells filled in. */
@@ -475,6 +544,7 @@ export function createInitialState(): GameStateData {
     passengers: [],
     flights: [],
     groundOperations: [],
+    groundVehicles: defaultGroundVehicles(),
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -518,8 +588,11 @@ export class GameState {
     if (typeof this.data.airport.reputation !== "number") {
       this.data.airport.reputation = 0;
     }
-    // Forward-compat: a state saved before V0.8 has no ground operations.
+    // Forward-compat: a state saved before V0.8 has no ground operations / fleet.
     if (!this.data.groundOperations) this.data.groundOperations = [];
+    if (!this.data.groundVehicles || this.data.groundVehicles.length === 0) {
+      this.data.groundVehicles = defaultGroundVehicles();
+    }
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
   }
@@ -852,6 +925,28 @@ export class GameState {
     if (!flightId) return true;
     const ops = this.getGroundOperationsForFlight(flightId);
     return ops.every((o) => isGroundOperationOver(o.state));
+  }
+
+  // -------------------------------------------------------- ground vehicles
+
+  getGroundVehicle(id: string | null | undefined): GroundVehicleData | undefined {
+    if (!id) return undefined;
+    return this.data.groundVehicles.find((v) => v.id === id);
+  }
+
+  getGroundVehiclesByType(type: GroundVehicleType): GroundVehicleData[] {
+    return this.data.groundVehicles.filter((v) => v.type === type);
+  }
+
+  /** First fully-idle vehicle of a type (at the depot, no operation), or undefined. */
+  idleGroundVehicle(type: GroundVehicleType): GroundVehicleData | undefined {
+    return this.data.groundVehicles.find(
+      (v) => v.type === type && v.state === "IDLE" && !v.operationId,
+    );
+  }
+
+  addGroundVehicle(vehicle: GroundVehicleData): void {
+    this.data.groundVehicles.push(vehicle);
   }
 
   setSelection(
