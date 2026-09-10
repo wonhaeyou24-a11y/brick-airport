@@ -150,6 +150,17 @@ export function isFlightOnTime(
 }
 
 /**
+ * Multiplier (≤ 1) applied to a passenger processing step's dwell when a
+ * matching service facility exists (spec §24, §25). More of the same facility
+ * speeds it up further, with diminishing returns and a floor.
+ */
+export function facilitySpeedFactor(count: number): number {
+  if (count <= 0) return 1;
+  const reduction = Math.min(0.6, facilityEffect(count, 0.35));
+  return Math.max(0.35, 1 - reduction);
+}
+
+/**
  * Deterministic pseudo-jitter in [-1, 1] from a string id — so a passenger's
  * satisfaction is stable across recomputes but varies between passengers.
  */

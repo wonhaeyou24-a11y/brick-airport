@@ -204,6 +204,11 @@ body {
   font-weight: 800;
 }
 
+.flight-row .fr-sat {
+  color: var(--brick-yellow);
+  font-weight: 800;
+}
+
 .hud-context {
   min-width: 190px;
   max-width: 62vw;
@@ -249,6 +254,16 @@ body {
 .stat-card strong {
   font-size: 15px;
   font-weight: 800;
+}
+
+.operations-title {
+  margin-top: 10px;
+}
+
+.operations-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
+  gap: 6px 14px;
 }
 
 .hud-selection .sel-label {
@@ -329,6 +344,10 @@ body {
   gap: 8px;
   align-items: flex-end;
   pointer-events: none;
+  max-height: 80vh;
+  overflow-y: auto;
+  /* keep the scrollbar from clipping the button shadows */
+  padding: 2px 4px;
 }
 
 .build-toggle {
@@ -445,8 +464,19 @@ body {
     gap: 6px 10px;
   }
 
+  .operations-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 10px;
+  }
+
   .stat-card strong {
     font-size: 14px;
+  }
+
+  .build-list {
+    max-height: 66dvh;
+    /* let touch scroll the list if it ever outgrows the band */
+    pointer-events: auto;
   }
 
   .flight-history {

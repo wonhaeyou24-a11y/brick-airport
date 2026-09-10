@@ -34,7 +34,34 @@ export type GateStatus =
   | "READY"
   | "DEPARTING";
 
-export type BuildingType = "TERMINAL" | "RUNWAY" | "GATE";
+/**
+ * Service facilities (V0.7-C) — buildings that improve passenger processing and
+ * satisfaction. They are ordinary BuildingData entries placed through the same
+ * build pipeline; their *operational effect* is computed separately in the
+ * operations layer, never stored on the building (spec §54).
+ */
+export type ServiceFacilityType = "CHECK_IN" | "SECURITY" | "BAGGAGE" | "LOUNGE";
+
+export type BuildingType =
+  | "TERMINAL"
+  | "RUNWAY"
+  | "GATE"
+  | ServiceFacilityType;
+
+export const SERVICE_FACILITY_TYPES: readonly ServiceFacilityType[] = [
+  "CHECK_IN",
+  "SECURITY",
+  "BAGGAGE",
+  "LOUNGE",
+];
+
+const SERVICE_FACILITY_SET: ReadonlySet<string> = new Set(SERVICE_FACILITY_TYPES);
+
+export function isServiceFacility(
+  type: BuildingType,
+): type is ServiceFacilityType {
+  return SERVICE_FACILITY_SET.has(type);
+}
 
 export type AircraftState =
   | "PARKED"
@@ -473,6 +500,27 @@ export class GameState {
 
   getBuilding(id: string): BuildingData | undefined {
     return this.data.buildings.find((b) => b.id === id);
+  }
+
+  /** How many buildings of a given type exist (V0.7-C facility effects). */
+  countBuildingsByType(type: BuildingType): number {
+    let n = 0;
+    for (const b of this.data.buildings) if (b.type === type) n += 1;
+    return n;
+  }
+
+  /** Service-facility counts keyed by type, e.g. { CHECK_IN: 2, LOUNGE: 1 }. */
+  serviceFacilityCounts(): Record<ServiceFacilityType, number> {
+    const counts: Record<ServiceFacilityType, number> = {
+      CHECK_IN: 0,
+      SECURITY: 0,
+      BAGGAGE: 0,
+      LOUNGE: 0,
+    };
+    for (const b of this.data.buildings) {
+      if (isServiceFacility(b.type)) counts[b.type] += 1;
+    }
+    return counts;
   }
 
   getGate(id: string): GateData | undefined {

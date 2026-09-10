@@ -6,8 +6,10 @@ import type { BuildModeState } from "../construction/BuildController";
  *
  * Pure view: a BUILD toggle that reveals the placeable building types (each
  * with its cost, or a lock badge when the airport level is too low) plus a
- * Cancel button. Emits intents via callbacks; the placement + purchase flow
- * lives in BuildController / Game.
+ * Cancel button. The type list is supplied by Game (from BUILDING_TYPES /
+ * BUILDING_CONFIG) so adding a building type never means editing this file.
+ * Emits intents via callbacks; the placement + purchase flow lives in
+ * BuildController / Game.
  */
 export interface BuildMenuCallbacks {
   onSelectType(type: BuildingType): void;
@@ -22,11 +24,11 @@ export interface BuildMenuItem {
   locked: boolean;
 }
 
-const TYPES: { type: BuildingType; label: string }[] = [
-  { type: "TERMINAL", label: "Terminal" },
-  { type: "GATE", label: "Gate" },
-  { type: "RUNWAY", label: "Runway" },
-];
+/** One entry in the menu, in display order. */
+export interface BuildMenuType {
+  type: BuildingType;
+  label: string;
+}
 
 export class BuildMenu {
   private readonly root: HTMLElement;
@@ -37,17 +39,21 @@ export class BuildMenu {
   private readonly costEls = new Map<BuildingType, HTMLElement>();
   private open = false;
 
-  constructor(container: HTMLElement, callbacks: BuildMenuCallbacks) {
+  constructor(
+    container: HTMLElement,
+    types: readonly BuildMenuType[],
+    callbacks: BuildMenuCallbacks,
+  ) {
     this.root = document.createElement("div");
     this.root.className = "build-menu";
-    this.root.innerHTML = TEMPLATE;
+    this.root.innerHTML = template(types);
     container.appendChild(this.root);
 
     this.toggle = this.must(".js-build-toggle");
     this.list = this.must(".js-build-list");
     this.cancelBtn = this.must(".js-build-cancel");
 
-    for (const { type } of TYPES) {
+    for (const { type } of types) {
       const btn = this.must<HTMLButtonElement>(`.js-type-${type}`);
       this.typeButtons.set(type, btn);
       this.costEls.set(type, this.must(`.js-cost-${type}`));
@@ -98,21 +104,22 @@ export class BuildMenu {
   }
 }
 
-const TEMPLATE = /* html */ `
+function template(types: readonly BuildMenuType[]): string {
+  const buttons = types
+    .map(
+      ({ type, label }) => /* html */ `
+    <button class="brick-btn build-type js-type-${type}">
+      <span class="build-label">${label}</span>
+      <span class="build-cost js-cost-${type}"></span>
+    </button>`,
+    )
+    .join("");
+
+  return /* html */ `
   <button class="brick-btn build-toggle js-build-toggle" title="Build">BUILD</button>
   <div class="build-list js-build-list" hidden>
-    <button class="brick-btn build-type js-type-TERMINAL">
-      <span class="build-label">Terminal</span>
-      <span class="build-cost js-cost-TERMINAL">$4,000</span>
-    </button>
-    <button class="brick-btn build-type js-type-GATE">
-      <span class="build-label">Gate</span>
-      <span class="build-cost js-cost-GATE">$1,000</span>
-    </button>
-    <button class="brick-btn build-type js-type-RUNWAY">
-      <span class="build-label">Runway</span>
-      <span class="build-cost js-cost-RUNWAY">$8,000</span>
-    </button>
+    ${buttons}
     <button class="brick-btn build-cancel js-build-cancel" hidden>Cancel</button>
   </div>
 `;
+}

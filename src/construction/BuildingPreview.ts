@@ -17,6 +17,10 @@ const PREVIEW_HEIGHT: Record<BuildingType, number> = {
   TERMINAL: 4,
   RUNWAY: 0.5,
   GATE: 1.2,
+  CHECK_IN: 2,
+  SECURITY: 2,
+  BAGGAGE: 2.4,
+  LOUNGE: 3,
 };
 
 export class BuildingPreview {

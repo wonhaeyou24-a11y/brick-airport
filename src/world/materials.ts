@@ -36,6 +36,12 @@ export const COLORS = {
   terminalAccent: 0xffb703,
   gate: 0x2a9d8f,
   gateBridge: 0xbfc7cc,
+  // Service facilities (V0.7-C) — one bright brick colour each.
+  facilityCheckIn: 0x4d9de0,
+  facilitySecurity: 0x6a4c93,
+  facilityBaggage: 0xe0913a,
+  facilityLounge: 0xe15554,
+  facilityRoof: 0xf4f4f4,
   aircraftBody: 0xffffff,
   aircraftWing: 0xd7dde2,
   aircraftTail: 0xe63946,

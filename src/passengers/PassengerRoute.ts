@@ -9,6 +9,7 @@ import {
   gateApproach,
   type PassengerWaypoints,
 } from "./waypoints";
+import { facilitySpeedFactor } from "../operations/AirportOperations";
 
 /**
  * PassengerRoute — waypoint-based walk for one passenger.
@@ -117,22 +118,36 @@ export class PassengerRoute {
     const wp = this.waypoints;
     const park = this.gateParkPosition();
 
+    // Service-facility effect (V0.7-C): if the airport has the matching
+    // facility, that processing step is faster. Resolved once, at spawn — a
+    // facility built later helps the NEXT passengers (spec §26). The state
+    // machine itself is unchanged (spec §25).
+    const checkIn = facilitySpeedFactor(
+      this.state.countBuildingsByType("CHECK_IN"),
+    );
+    const security = facilitySpeedFactor(
+      this.state.countBuildingsByType("SECURITY"),
+    );
+    const baggage = facilitySpeedFactor(
+      this.state.countBuildingsByType("BAGGAGE"),
+    );
+
     if (this.data.routeType === "DEPARTURE") {
       this.steps = [
         { state: "TO_TERMINAL", target: wp.terminalEntrance, dwell: 0.2 },
-        { state: "CHECK_IN", target: wp.checkIn, dwell: 1.5 },
-        { state: "TO_GATE", target: wp.security, dwell: 0.2 },
-        { state: "TO_GATE", target: gateApproach(park), dwell: 0.2 },
+        { state: "CHECK_IN", target: wp.checkIn, dwell: 1.5 * checkIn },
+        { state: "TO_GATE", target: wp.security, dwell: 0.2 * security },
+        { state: "TO_GATE", target: gateApproach(park), dwell: 0.2 * security },
         { state: "BOARDING", target: boardingPoint(park), dwell: 1.2 },
         { state: "BOARDED", target: null, dwell: 0 },
       ];
     } else {
       this.steps = [
-        { state: "DISEMBARKING", target: boardingPoint(park), dwell: 0.6 },
+        { state: "DISEMBARKING", target: boardingPoint(park), dwell: 0.6 * baggage },
         {
           state: "TO_TERMINAL_AFTER_ARRIVAL",
           target: gateApproach(park),
-          dwell: 0.2,
+          dwell: 0.2 * baggage,
         },
         {
           state: "TO_TERMINAL_AFTER_ARRIVAL",

@@ -7,6 +7,8 @@ import { Building } from "../buildings/Building";
 import { Runway } from "../buildings/Runway";
 import { Terminal } from "../buildings/Terminal";
 import { Gate } from "../buildings/Gate";
+import { ServiceFacility } from "../buildings/ServiceFacility";
+import { isServiceFacility } from "../core/GameState";
 
 /**
  * AirportWorld — builds the static scenery (ground, grid, buildings) from
@@ -81,6 +83,7 @@ function createBuilding(data: BuildingData): Building | null {
     case "GATE":
       return new Gate(data);
     default:
+      if (isServiceFacility(data.type)) return new ServiceFacility(data);
       console.warn(`AirportWorld: unknown building type "${data.type}"`);
       return null;
   }

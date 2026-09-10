@@ -32,6 +32,11 @@ export const BUILDING_FOOTPRINTS: Record<BuildingType, CellSize> = {
   TERMINAL: { cols: 8, rows: 3 },
   RUNWAY: { cols: 18, rows: 4 },
   GATE: { cols: 1, rows: 1 },
+  // Service facilities — small 2x2 pads (V0.7-C).
+  CHECK_IN: { cols: 2, rows: 2 },
+  SECURITY: { cols: 2, rows: 2 },
+  BAGGAGE: { cols: 2, rows: 2 },
+  LOUNGE: { cols: 2, rows: 2 },
 };
 
 export class PlacementSystem {

@@ -1,5 +1,10 @@
 import * as THREE from "three";
-import { GameState, makeBuilding, isFlightOver } from "./GameState";
+import {
+  GameState,
+  makeBuilding,
+  isFlightOver,
+  isServiceFacility,
+} from "./GameState";
 import type {
   BuildingData,
   BuildingType,
@@ -30,6 +35,8 @@ import {
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
 import { computeAirportLevel } from "../progression/AirportProgression";
+import { OperationsManager } from "../operations/OperationsManager";
+import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { PassengerManager } from "../passengers/PassengerManager";
@@ -66,6 +73,7 @@ export class Game {
   private readonly flightScheduler: FlightScheduler;
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
+  private readonly operations: OperationsManager;
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -82,6 +90,8 @@ export class Game {
   private shownBuildMenuSig = "";
   /** Signature of the Recent Flights panel (V0.6-E). */
   private shownHistorySig = "";
+  /** Signature of the Operations metrics row (V0.7). */
+  private shownOperationsSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -129,8 +139,11 @@ export class Game {
     this.aircraftManager = new AircraftManager(this.state);
     this.scene.add(this.aircraftManager.group);
 
+    this.operations = new OperationsManager(this.state);
+
     this.flightScheduler = new FlightScheduler(this.state, {
       spawnAircraft: (data) => this.aircraftManager.spawn(data),
+      onFlightCompleted: (flight) => this.operations.handleFlightCompleted(flight),
     });
 
     this.passengerManager = new PassengerManager(
@@ -162,11 +175,19 @@ export class Game {
     this.refreshHudStats();
     this.refreshStatistics();
 
-    this.buildMenu = new BuildMenu(hudContainer, {
-      onSelectType: (type) => this.onBuildTypeSelected(type),
-      onCancel: () => this.buildController.cancel(),
-    });
+    this.buildMenu = new BuildMenu(
+      hudContainer,
+      BUILDING_TYPES.map((type) => ({
+        type,
+        label: BUILDING_CONFIG[type].label,
+      })),
+      {
+        onSelectType: (type) => this.onBuildTypeSelected(type),
+        onCancel: () => this.buildController.cancel(),
+      },
+    );
     this.refreshBuildMenu();
+    this.refreshOperations();
 
     this.loop = new GameLoop(
       (dt) => this.update(dt),
@@ -250,6 +271,7 @@ export class Game {
     this.occupancy.add(data);
     this.world.addBuilding(data);
     if (data.type === "GATE") this.state.addGateForBuilding(data);
+    if (isServiceFacility(data.type)) this.operations.recomputeServiceScore();
     this.refreshHudStats();
     return true;
   }
@@ -350,7 +372,7 @@ export class Game {
       this.hud.setSelection({
         title: "BUILD MODE",
         lines: [
-          `${capitalize(state.type ?? "—")}${cfg ? `  $${cfg.cost.toLocaleString("en-US")}` : ""}`,
+          `${cfg ? cfg.label : "—"}${cfg ? `  $${cfg.cost.toLocaleString("en-US")}` : ""}`,
           state.cell ? `Cell ${state.cell.col}, ${state.cell.row}` : "—",
           `Status: ${buildStatusText(state)}`,
         ],
@@ -456,6 +478,21 @@ export class Game {
         lines,
       };
     }
+    if (b && isServiceFacility(b.type)) {
+      const cfg = getBuildingConfig(b.type);
+      const svc = OPERATIONS_CONFIG.serviceBonusPerFacility[b.type] ?? 0;
+      const sat = OPERATIONS_CONFIG.satisfactionBonusPerFacility[b.type] ?? 0;
+      const built = this.state.countBuildingsByType(b.type);
+      return {
+        title: cfg.label,
+        lines: [
+          "Service facility",
+          `Level ${b.level}`,
+          `Service +${svc} · Satisfaction +${sat}`,
+          built > 1 ? `${built} built (stacked bonus reduced)` : "1 built",
+        ],
+      };
+    }
     if (b) {
       const label = capitalize(b.type);
       return { title: label, lines: [`Type: ${label}`, `Level: ${b.level}`] };
@@ -556,8 +593,25 @@ export class Game {
     this.refreshSelectionHud();
     this.refreshDynamicStats();
     this.refreshStatistics();
+    this.refreshOperations();
     this.refreshFlightHistory();
     this.refreshBuildMenu();
+  }
+
+  /**
+   * Push the live Operations metrics to the HUD when they change. A separate
+   * block below the Statistics grid — the stats' meanings are untouched (§59).
+   */
+  private refreshOperations(): void {
+    const o = this.state.operations;
+    const reputation = Math.round(this.state.airport.reputation);
+    const serviceScore = Math.round(o.serviceScore);
+    const satisfaction = Math.round(o.passengerSatisfaction);
+    const onTimeRate = Math.round(o.onTimeRate);
+    const sig = `${serviceScore}|${satisfaction}|${onTimeRate}|${reputation}`;
+    if (sig === this.shownOperationsSig) return;
+    this.shownOperationsSig = sig;
+    this.hud.setOperations({ serviceScore, satisfaction, onTimeRate, reputation });
   }
 
   /**

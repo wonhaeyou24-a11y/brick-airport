@@ -44,6 +44,16 @@ export interface FlightHistoryEntry {
   id: string;
   route: string;
   revenue: number;
+  /** Average passenger satisfaction, shown as "★83" when present (V0.7-E). */
+  satisfaction?: number;
+}
+
+/** Live operations metrics shown under the Airport Statistics grid (V0.7). */
+export interface OperationsInfo {
+  serviceScore: number;
+  satisfaction: number;
+  onTimeRate: number;
+  reputation: number;
 }
 
 export interface HudCallbacks {
@@ -71,6 +81,10 @@ export class HUD {
   private readonly statBalanceEl: HTMLElement;
   private readonly statAvgEl: HTMLElement;
   private readonly statBoardingEl: HTMLElement;
+  private readonly opServiceEl: HTMLElement;
+  private readonly opSatisfactionEl: HTMLElement;
+  private readonly opOnTimeEl: HTMLElement;
+  private readonly opReputationEl: HTMLElement;
   private readonly noticeEl: HTMLElement;
   private readonly flightHistoryEl: HTMLElement;
   private readonly flightHistoryListEl: HTMLElement;
@@ -99,6 +113,10 @@ export class HUD {
     this.statBalanceEl = this.must(".js-stat-balance");
     this.statAvgEl = this.must(".js-stat-avg");
     this.statBoardingEl = this.must(".js-stat-boarding");
+    this.opServiceEl = this.must(".js-op-service");
+    this.opSatisfactionEl = this.must(".js-op-satisfaction");
+    this.opOnTimeEl = this.must(".js-op-ontime");
+    this.opReputationEl = this.must(".js-op-reputation");
     this.noticeEl = this.must(".js-notice");
     this.flightHistoryEl = this.must(".js-flight-history");
     this.flightHistoryListEl = this.must(".js-flight-history-list");
@@ -188,6 +206,17 @@ export class HUD {
   }
 
   /**
+   * Update the Operations metrics row under the Statistics grid (V0.7). A
+   * separate block — it never changes the meaning of the stats above (§48, §59).
+   */
+  setOperations(o: OperationsInfo): void {
+    this.opServiceEl.textContent = String(o.serviceScore);
+    this.opSatisfactionEl.textContent = String(o.satisfaction);
+    this.opOnTimeEl.textContent = `${o.onTimeRate}%`;
+    this.opReputationEl.textContent = String(o.reputation);
+  }
+
+  /**
    * Render the Recent Flights panel (V0.6-E). A separate panel from Airport
    * Statistics — never replaces it. Hidden until the first flight completes.
    */
@@ -198,14 +227,20 @@ export class HUD {
     }
     this.flightHistoryEl.hidden = false;
     this.flightHistoryListEl.innerHTML = entries
-      .map(
-        (e) =>
+      .map((e) => {
+        const star =
+          e.satisfaction !== undefined
+            ? `<span class="fr-sat">★${e.satisfaction}</span>`
+            : "";
+        return (
           `<div class="flight-row">` +
           `<span class="fr-id">${escapeHtml(e.id)}</span>` +
           `<span class="fr-route">${escapeHtml(e.route)}</span>` +
+          star +
           `<span class="fr-rev">$${e.revenue.toLocaleString("en-US")}</span>` +
-          `</div>`,
-      )
+          `</div>`
+        );
+      })
       .join("");
   }
 
@@ -261,6 +296,13 @@ const TEMPLATE = /* html */ `
           <div class="stat-card"><span>Balance</span><strong class="js-stat-balance">$10,000</strong></div>
           <div class="stat-card"><span>Avg Pax / Flight</span><strong class="js-stat-avg">0.0</strong></div>
           <div class="stat-card"><span>Boarding Rate</span><strong class="js-stat-boarding">0%</strong></div>
+        </div>
+        <div class="stat-panel-title operations-title">Operations</div>
+        <div class="operations-grid">
+          <div class="stat-card"><span>Service</span><strong class="js-op-service">50</strong></div>
+          <div class="stat-card"><span>Satisfaction</span><strong class="js-op-satisfaction">75</strong></div>
+          <div class="stat-card"><span>On-time</span><strong class="js-op-ontime">90%</strong></div>
+          <div class="stat-card"><span>Reputation</span><strong class="js-op-reputation">0</strong></div>
         </div>
       </div>
       <div class="hud-selection js-selection" hidden>

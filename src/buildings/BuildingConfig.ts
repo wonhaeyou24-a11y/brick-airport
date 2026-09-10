@@ -1,4 +1,6 @@
 import type { BuildingType } from "../core/GameState";
+export { isServiceFacility } from "../core/GameState";
+export type { ServiceFacilityType } from "../core/GameState";
 
 /**
  * BuildingConfig — the single source for what a building costs and when it
@@ -20,6 +22,13 @@ export const BUILDING_CONFIG: Record<BuildingType, BuildingConfig> = {
   GATE: { cost: 1000, requiredLevel: 1, label: "Gate" },
   TERMINAL: { cost: 4000, requiredLevel: 2, label: "Terminal" },
   RUNWAY: { cost: 8000, requiredLevel: 3, label: "Runway" },
+  // Service facilities (V0.7-C). Costs sit between a gate and a terminal so a
+  // growing airport ($10k start) can afford the basics early and the rest as
+  // it levels up (spec §21, §22).
+  CHECK_IN: { cost: 2000, requiredLevel: 1, label: "Check-in" },
+  SECURITY: { cost: 2500, requiredLevel: 1, label: "Security" },
+  BAGGAGE: { cost: 3000, requiredLevel: 2, label: "Baggage" },
+  LOUNGE: { cost: 4000, requiredLevel: 3, label: "Lounge" },
 };
 
 /** Placeable building types, in BuildMenu display order. */
@@ -27,6 +36,10 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   "TERMINAL",
   "GATE",
   "RUNWAY",
+  "CHECK_IN",
+  "SECURITY",
+  "BAGGAGE",
+  "LOUNGE",
 ];
 
 export function getBuildingConfig(type: BuildingType): BuildingConfig {
