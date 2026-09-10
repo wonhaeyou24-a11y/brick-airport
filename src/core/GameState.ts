@@ -134,7 +134,7 @@ export interface OperationsData {
  */
 export const DEFAULT_OPERATIONS: OperationsData = {
   serviceScore: 50,
-  passengerSatisfaction: 75,
+  passengerSatisfaction: 70,
   onTimeRate: 90,
 };
 
@@ -223,6 +223,11 @@ export interface PassengerData {
   colorIndex: number;
   /** Set once ticket revenue for this passenger has been paid (double-pay guard). */
   revenueProcessed: boolean;
+  /**
+   * Final satisfaction 0–100 (V0.7-D), computed once when the passenger reaches
+   * a terminal state (BOARDED / ARRIVED). Undefined until then.
+   */
+  satisfaction?: number;
 }
 
 /**
@@ -262,6 +267,8 @@ export interface FlightData {
   elapsedSeconds?: number;
   /** Whether the flight finished within its time budget (set on completion). */
   onTime?: boolean;
+  /** Departure-passenger satisfaction scores captured as each one boards (V0.7-D). */
+  paxSatisfaction?: number[];
   /** Mean passenger satisfaction for this flight (set on completion, V0.7-D). */
   averageSatisfaction?: number;
 }
@@ -684,6 +691,14 @@ export class GameState {
     return this.data.flights.find(
       (f) => f.aircraftId === aircraftId && !isFlightOver(f.state),
     );
+  }
+
+  /** Record one departure passenger's satisfaction against its flight (V0.7-D). */
+  recordPassengerSatisfaction(flightId: string, value: number): void {
+    const flight = this.getFlight(flightId);
+    if (!flight) return;
+    if (!flight.paxSatisfaction) flight.paxSatisfaction = [];
+    flight.paxSatisfaction.push(value);
   }
 
   /** Link a passenger to a flight (both directions stay consistent). No-op if unknown / dup. */

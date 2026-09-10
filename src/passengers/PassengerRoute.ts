@@ -40,6 +40,8 @@ export class PassengerRoute {
   private atStep = false;
   /** Time spent in the terminal ARRIVED state, for culling. */
   arrivedTime = 0;
+  /** Total game-seconds this passenger has been walking its route (V0.7-D). */
+  elapsed = 0;
 
   constructor(
     private readonly data: PassengerData,
@@ -59,6 +61,9 @@ export class PassengerRoute {
       return;
     }
     if (this.data.state === "BOARDED") return;
+
+    // Route time accrues only while the passenger is still being processed.
+    this.elapsed += deltaTime;
 
     if (step.target && !this.atStep) {
       if (this.moveToward(step.target, deltaTime)) {

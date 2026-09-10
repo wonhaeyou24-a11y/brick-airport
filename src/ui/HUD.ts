@@ -300,7 +300,7 @@ const TEMPLATE = /* html */ `
         <div class="stat-panel-title operations-title">Operations</div>
         <div class="operations-grid">
           <div class="stat-card"><span>Service</span><strong class="js-op-service">50</strong></div>
-          <div class="stat-card"><span>Satisfaction</span><strong class="js-op-satisfaction">75</strong></div>
+          <div class="stat-card"><span>Satisfaction</span><strong class="js-op-satisfaction">70</strong></div>
           <div class="stat-card"><span>On-time</span><strong class="js-op-ontime">90%</strong></div>
           <div class="stat-card"><span>Reputation</span><strong class="js-op-reputation">0</strong></div>
         </div>

@@ -55,15 +55,14 @@ export interface PassengerSatisfactionInput {
   routeSeconds: number;
   /** Deterministic spread in [-1, 1] derived from the passenger id. */
   jitter: number;
-  /** Whether a SERVICE_BONUS event is currently active. */
-  serviceBonusActive: boolean;
 }
 
 /**
- * One passenger's satisfaction: base + facility bonuses − wait penalty
- * (+ service-bonus event) ± jitter. The flight-level on-time adjustment is NOT
- * applied here — it is added later in computeFlightSatisfaction, because the
- * flight's on-time status is not known until it completes (spec §30, §32).
+ * One passenger's satisfaction: base + facility bonuses − wait penalty ± jitter.
+ * The flight-level on-time adjustment is NOT applied here — it is added later in
+ * computeFlightSatisfaction, because the flight's on-time status is not known
+ * until it completes (spec §30, §32). The SERVICE_BONUS event is applied at the
+ * airport-aggregate level, not per passenger.
  */
 export function computePassengerSatisfaction(
   input: PassengerSatisfactionInput,
@@ -77,7 +76,6 @@ export function computePassengerSatisfaction(
   }
   const over = Math.max(0, input.routeSeconds - C.normalRouteSeconds);
   score -= Math.min(C.maxWaitPenalty, over * C.waitPenaltyPerSecond);
-  if (input.serviceBonusActive) score += C.serviceBonusAmount;
   score += input.jitter * C.satisfactionJitter;
   return clampScore(Math.round(score));
 }

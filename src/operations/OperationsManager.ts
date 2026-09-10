@@ -1,5 +1,10 @@
 import type { FlightData, GameState } from "../core/GameState";
-import { computeOnTimeRate, computeServiceScore } from "./AirportOperations";
+import {
+  computeAirportSatisfaction,
+  computeFlightSatisfaction,
+  computeOnTimeRate,
+  computeServiceScore,
+} from "./AirportOperations";
 import { OPERATIONS_CONFIG } from "./OperationsConfig";
 
 /**
@@ -17,6 +22,8 @@ import { OPERATIONS_CONFIG } from "./OperationsConfig";
 export class OperationsManager {
   /** on-time flags of the most recent completed flights (bounded ring). */
   private readonly recentOnTime: boolean[] = [];
+  /** averageSatisfaction of the most recent completed flights (bounded ring). */
+  private readonly recentSatisfaction: number[] = [];
 
   constructor(private readonly state: GameState) {
     this.recomputeServiceScore();
@@ -30,8 +37,21 @@ export class OperationsManager {
 
   /** FlightScheduler hook: a flight just reached COMPLETED. */
   handleFlightCompleted(flight: FlightData): void {
-    this.pushRecent(this.recentOnTime, flight.onTime ?? true);
-    this.state.operations.onTimeRate = computeOnTimeRate(this.recentOnTime);
+    const onTime = flight.onTime ?? true;
+
+    // Freeze the flight's average from the departure-pax scores it collected
+    // (spec §33) — this is also what the Recent Flights ★ shows.
+    flight.averageSatisfaction = computeFlightSatisfaction(
+      flight.paxSatisfaction ?? [],
+      onTime,
+    );
+
+    this.pushRecent(this.recentOnTime, onTime);
+    this.pushRecent(this.recentSatisfaction, flight.averageSatisfaction);
+
+    const o = this.state.operations;
+    o.onTimeRate = computeOnTimeRate(this.recentOnTime);
+    o.passengerSatisfaction = computeAirportSatisfaction(this.recentSatisfaction);
   }
 
   private pushRecent<T>(ring: T[], value: T): void {

@@ -3,6 +3,10 @@ import type { AircraftState, GameState, Vec3 } from "../core/GameState";
 import { Passenger, disposePassengerResources } from "./Passenger";
 import { PassengerRoute, ARRIVED_LINGER } from "./PassengerRoute";
 import { boardingPoint, type PassengerWaypoints } from "./waypoints";
+import {
+  computePassengerSatisfaction,
+  jitterFromId,
+} from "../operations/AirportOperations";
 
 /**
  * PassengerManager — owns the passenger fleet and drives the departure /
@@ -65,6 +69,7 @@ export class PassengerManager {
 
     for (const route of this.routes.values()) route.tick(deltaTime);
 
+    this.captureSatisfaction();
     this.cullArrived();
     this.reconcileEntities();
     this.syncTransforms();
@@ -167,6 +172,33 @@ export class PassengerManager {
         revenueProcessed: false,
       });
       if (flightId) this.state.addFlightPassenger(flightId, id);
+    }
+  }
+
+  // ----------------------------------------------------------- satisfaction
+
+  /**
+   * Compute each passenger's final satisfaction once, the frame it reaches a
+   * terminal state (BOARDED for departures, ARRIVED for arrivals) — not per
+   * frame (spec §32). Departure scores are also recorded against the flight so
+   * its average survives the passengers being removed on pushback (spec §33).
+   */
+  private captureSatisfaction(): void {
+    const counts = this.state.serviceFacilityCounts();
+    for (const pd of this.state.data.passengers) {
+      if (pd.satisfaction !== undefined) continue;
+      const terminal = pd.routeType === "DEPARTURE" ? "BOARDED" : "ARRIVED";
+      if (pd.state !== terminal) continue;
+
+      const score = computePassengerSatisfaction({
+        counts,
+        routeSeconds: this.routes.get(pd.id)?.elapsed ?? 0,
+        jitter: jitterFromId(pd.id),
+      });
+      pd.satisfaction = score;
+      if (pd.routeType === "DEPARTURE" && pd.flightId) {
+        this.state.recordPassengerSatisfaction(pd.flightId, score);
+      }
     }
   }
 

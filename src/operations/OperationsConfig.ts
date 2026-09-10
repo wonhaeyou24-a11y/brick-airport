@@ -26,8 +26,12 @@ export const OPERATIONS_CONFIG = {
   } as Record<string, number>,
 
   // ------------------------------------------------- passenger satisfaction ---
-  /** Satisfaction a passenger starts from before any bonuses / penalties. */
-  baseSatisfaction: 75,
+  /**
+   * Satisfaction a passenger starts from before any bonuses / penalties.
+   * Tuned so a facility-less airport sits around ~70 and a fully-equipped one
+   * reaches the low 90s, leaving headroom for event penalties.
+   */
+  baseSatisfaction: 66,
   /** Satisfaction points the FIRST facility of each kind contributes (§31). */
   satisfactionBonusPerFacility: {
     CHECK_IN: 5,

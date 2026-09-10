@@ -443,6 +443,9 @@ export class Game {
         if (flight) lines.push(`Flight status: ${flight.state}`);
         lines.push(`Aircraft: ${p.aircraftId ?? "—"}`);
         lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
+        if (p.satisfaction !== undefined) {
+          lines.push(`Satisfaction: ${p.satisfaction}`);
+        }
       }
       return { title: s.getSelectionLabel(), lines };
     }
@@ -544,7 +547,7 @@ export class Game {
       const p = this.state.getPassenger(sel.id);
       if (p) {
         const f = this.state.getFlight(p.flightId);
-        sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
+        sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}|${p.satisfaction ?? "-"}`;
       }
     } else {
       const building = this.state.getBuilding(sel.id);
@@ -631,7 +634,7 @@ export class Game {
       .slice(0, 5);
 
     const sig = completed
-      .map((f) => `${f.id}:${f.revenue ?? 0}`)
+      .map((f) => `${f.id}:${f.revenue ?? 0}:${f.averageSatisfaction ?? "-"}`)
       .join(",");
     if (sig === this.shownHistorySig) return;
     this.shownHistorySig = sig;
@@ -641,6 +644,10 @@ export class Game {
         id: f.id,
         route: flightRoute(f),
         revenue: f.revenue ?? 0,
+        satisfaction:
+          f.averageSatisfaction !== undefined
+            ? Math.round(f.averageSatisfaction)
+            : undefined,
       })),
     );
   }
