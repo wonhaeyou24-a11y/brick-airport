@@ -158,6 +158,41 @@ export function facilitySpeedFactor(count: number): number {
   return Math.max(0.35, 1 - reduction);
 }
 
+export interface GroundEfficiencyInput {
+  /** Ground vehicles in the fleet. */
+  vehicleCount: number;
+  /** Service facilities built (any type). */
+  facilityCount: number;
+  /** Turnaround tasks finished in the recent window. */
+  recentCompleted: number;
+  /** …of those, how many were delayed waiting for a vehicle (spec §35). */
+  recentDelayed: number;
+}
+
+/**
+ * Operational efficiency 0–100 (spec §32, §33): facilities + vehicles push it
+ * up, recent turnaround delays pull it down. Pure — the manager feeds it a
+ * small recent-history summary, never the whole operation list (spec §38).
+ */
+export function computeGroundEfficiency(input: GroundEfficiencyInput): number {
+  const E = C.groundEfficiency;
+  let score = E.base;
+  score += Math.min(input.vehicleCount, E.vehicleCap) * E.perVehicle;
+  score += Math.min(input.facilityCount, 6) * 2;
+
+  if (input.recentCompleted > 0) {
+    const cleanRatio = Math.max(
+      0,
+      1 - input.recentDelayed / input.recentCompleted,
+    );
+    score += cleanRatio * E.completedBonusMax;
+    score -= (1 - cleanRatio) * E.delayPenaltyMax;
+  } else {
+    score += E.completedBonusMax * 0.5; // neutral before any turnaround history
+  }
+  return clampScore(Math.round(score));
+}
+
 /**
  * Deterministic pseudo-jitter in [-1, 1] from a string id — so a passenger's
  * satisfaction is stable across recomputes but varies between passengers.

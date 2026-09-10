@@ -262,8 +262,8 @@ body {
 
 .operations-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(64px, 1fr));
-  gap: 6px 14px;
+  grid-template-columns: repeat(5, minmax(52px, 1fr));
+  gap: 6px 12px;
 }
 
 .hud-selection .sel-label {
@@ -465,9 +465,22 @@ body {
     gap: 6px 10px;
   }
 
+  /* 5 metrics in a tight 3-col grid so the panel clears the viewport (§46). */
   .operations-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px 10px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 8px;
+  }
+
+  .operations-grid .stat-card span {
+    font-size: 9px;
+  }
+
+  .operations-grid .stat-card strong {
+    font-size: 13px;
+  }
+
+  .operations-title {
+    margin-top: 6px;
   }
 
   .stat-card strong {

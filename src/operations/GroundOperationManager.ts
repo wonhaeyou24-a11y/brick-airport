@@ -1,5 +1,5 @@
 import type { GameState, GroundOperationData } from "../core/GameState";
-import { isFlightOver } from "../core/GameState";
+import { isFlightOver, isServiceFacility } from "../core/GameState";
 import type { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
 import {
   TURNAROUND_SEQUENCE,
@@ -8,6 +8,8 @@ import {
   nextPendingOperation,
   vehicleTypeForOperation,
 } from "./GroundOperation";
+import { computeGroundEfficiency } from "./AirportOperations";
+import { OPERATIONS_CONFIG as C } from "./OperationsConfig";
 import type { GroundVehicleType } from "../core/GameState";
 
 /** What Game must act on after a ground-operations tick. */
@@ -50,11 +52,17 @@ export class GroundOperationManager {
   private readonly turnaroundStarted = new Set<string>();
   /** flightId -> "ready for departure" notice already shown. */
   private readonly readyAnnounced = new Set<string>();
+  /** operationId -> game-seconds it has sat PENDING (for the delay check). */
+  private readonly pendingTime = new Map<string, number>();
+  /** Recent finished tasks — true = it was delayed waiting for a vehicle (§38). */
+  private readonly recentOps: boolean[] = [];
 
   constructor(
     private readonly state: GameState,
     private readonly vehicles: GroundVehicleManager,
-  ) {}
+  ) {
+    this.recomputeEfficiency();
+  }
 
   update(deltaTime: number): GroundOperationsTick {
     const notices: string[] = [];
@@ -106,6 +114,10 @@ export class GroundOperationManager {
 
       switch (op.state) {
         case "PENDING":
+          this.pendingTime.set(
+            op.id,
+            (this.pendingTime.get(op.id) ?? 0) + deltaTime,
+          );
           this.tryAssignVehicle(op, notices);
           break;
         case "ASSIGNED":
@@ -132,9 +144,21 @@ export class GroundOperationManager {
     if (!vehicle) return; // busy — the task waits (spec §35, §36)
 
     if (this.vehicles.dispatch(vehicle.id, op.id)) {
-      op.state = "ASSIGNED";
-      op.vehicleId = vehicle.id;
+      this.markAssigned(op, vehicle.id);
       notices.push(`${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} started`);
+    }
+  }
+
+  /** Attach a vehicle to a task and flag it delayed if it waited too long (§35). */
+  private markAssigned(op: GroundOperationData, vehicleId: string): void {
+    op.state = "ASSIGNED";
+    op.vehicleId = vehicleId;
+    const waited = this.pendingTime.get(op.id) ?? 0;
+    this.pendingTime.delete(op.id);
+    if (waited > C.ground.pendingDelayThreshold) {
+      op.delayed = true;
+      const flight = this.state.getFlight(op.flightId);
+      if (flight) flight.turnaroundDelayed = true;
     }
   }
 
@@ -145,6 +169,7 @@ export class GroundOperationManager {
     const vehicleId = op.vehicleId ?? null;
     const vehicleType = vehicleTypeForOperation(op.type);
     this.state.completeGroundOperation(op.id);
+    this.recordCompletion(op);
     notices.push(`${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} completed`);
 
     if (!vehicleId) return;
@@ -153,12 +178,30 @@ export class GroundOperationManager {
     // otherwise send it home.
     const waiting = this.findWaitingOperation(vehicleType, op.id);
     if (waiting && this.vehicles.redirect(vehicleId, waiting.id)) {
-      waiting.state = "ASSIGNED";
-      waiting.vehicleId = vehicleId;
+      this.markAssigned(waiting, vehicleId);
       notices.push(`${OP_ICON[waiting.type] ?? "🔧"} ${opWords(waiting.type)} started`);
     } else {
       this.vehicles.recall(vehicleId);
     }
+  }
+
+  /** Track the recent-history summary and recompute ground efficiency (§38). */
+  private recordCompletion(op: GroundOperationData): void {
+    this.recentOps.push(op.delayed === true);
+    if (this.recentOps.length > C.ground.recentWindow) this.recentOps.shift();
+    this.recomputeEfficiency();
+  }
+
+  private recomputeEfficiency(): void {
+    const facilityCount = this.state.data.buildings.filter((b) =>
+      isServiceFacility(b.type),
+    ).length;
+    this.state.operations.groundEfficiency = computeGroundEfficiency({
+      vehicleCount: this.state.data.groundVehicles.length,
+      facilityCount,
+      recentCompleted: this.recentOps.length,
+      recentDelayed: this.recentOps.filter(Boolean).length,
+    });
   }
 
   /** A PENDING task, next-in-sequence for its flight, that needs this vehicle type. */
@@ -201,6 +244,9 @@ export class GroundOperationManager {
       if (!flight || isFlightOver(flight.state)) {
         this.turnaroundStarted.delete(flightId);
         this.readyAnnounced.delete(flightId);
+        for (const op of this.state.getGroundOperationsForFlight(flightId)) {
+          this.pendingTime.delete(op.id);
+        }
       }
     }
   }

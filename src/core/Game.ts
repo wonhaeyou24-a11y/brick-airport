@@ -665,10 +665,17 @@ export class Game {
     const serviceScore = Math.round(o.serviceScore);
     const satisfaction = Math.round(o.passengerSatisfaction);
     const onTimeRate = Math.round(o.onTimeRate);
-    const sig = `${serviceScore}|${satisfaction}|${onTimeRate}|${reputation}`;
+    const groundEfficiency = Math.round(o.groundEfficiency ?? 70);
+    const sig = `${serviceScore}|${satisfaction}|${onTimeRate}|${groundEfficiency}|${reputation}`;
     if (sig === this.shownOperationsSig) return;
     this.shownOperationsSig = sig;
-    this.hud.setOperations({ serviceScore, satisfaction, onTimeRate, reputation });
+    this.hud.setOperations({
+      serviceScore,
+      satisfaction,
+      onTimeRate,
+      reputation,
+      groundEfficiency,
+    });
   }
 
   /**

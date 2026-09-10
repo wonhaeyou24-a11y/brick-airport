@@ -48,12 +48,14 @@ export interface FlightHistoryEntry {
   satisfaction?: number;
 }
 
-/** Live operations metrics shown under the Airport Statistics grid (V0.7). */
+/** Live operations metrics shown under the Airport Statistics grid (V0.7 / V0.8). */
 export interface OperationsInfo {
   serviceScore: number;
   satisfaction: number;
   onTimeRate: number;
   reputation: number;
+  /** Ground operation efficiency 0–100 (V0.8-D). */
+  groundEfficiency: number;
 }
 
 export interface HudCallbacks {
@@ -85,6 +87,7 @@ export class HUD {
   private readonly opSatisfactionEl: HTMLElement;
   private readonly opOnTimeEl: HTMLElement;
   private readonly opReputationEl: HTMLElement;
+  private readonly opGroundEl: HTMLElement;
   private readonly noticeEl: HTMLElement;
   private readonly flightHistoryEl: HTMLElement;
   private readonly flightHistoryListEl: HTMLElement;
@@ -117,6 +120,7 @@ export class HUD {
     this.opSatisfactionEl = this.must(".js-op-satisfaction");
     this.opOnTimeEl = this.must(".js-op-ontime");
     this.opReputationEl = this.must(".js-op-reputation");
+    this.opGroundEl = this.must(".js-op-ground");
     this.noticeEl = this.must(".js-notice");
     this.flightHistoryEl = this.must(".js-flight-history");
     this.flightHistoryListEl = this.must(".js-flight-history-list");
@@ -214,6 +218,7 @@ export class HUD {
     this.opSatisfactionEl.textContent = String(o.satisfaction);
     this.opOnTimeEl.textContent = `${o.onTimeRate}%`;
     this.opReputationEl.textContent = String(o.reputation);
+    this.opGroundEl.textContent = String(o.groundEfficiency);
   }
 
   /**
@@ -302,6 +307,7 @@ const TEMPLATE = /* html */ `
           <div class="stat-card"><span>Service</span><strong class="js-op-service">50</strong></div>
           <div class="stat-card"><span>Satisfaction</span><strong class="js-op-satisfaction">70</strong></div>
           <div class="stat-card"><span>On-time</span><strong class="js-op-ontime">90%</strong></div>
+          <div class="stat-card"><span>Ground Eff</span><strong class="js-op-ground">70</strong></div>
           <div class="stat-card"><span>Reputation</span><strong class="js-op-reputation">0</strong></div>
         </div>
       </div>

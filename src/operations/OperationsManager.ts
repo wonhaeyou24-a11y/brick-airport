@@ -73,6 +73,13 @@ export class OperationsManager {
       flight.paxSatisfaction ?? [],
       onTime,
     );
+    // A delayed turnaround costs the flight a little satisfaction (spec §39) —
+    // small, so one slow turnaround never swings the airport's standing.
+    if (flight.turnaroundDelayed) {
+      flight.averageSatisfaction = clampScore(
+        flight.averageSatisfaction - OPERATIONS_CONFIG.ground.turnaroundDelayPenalty,
+      );
+    }
 
     this.pushRecent(this.recentOnTime, onTime);
     this.pushRecent(this.recentSatisfaction, flight.averageSatisfaction);
