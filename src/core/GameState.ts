@@ -83,6 +83,37 @@ export type FlightState =
 /** Flight direction — reuses the passenger route vocabulary. */
 export type FlightRouteType = PassengerRouteType;
 
+/**
+ * Live airport operating metrics (V0.7-A). Separate from the lifetime
+ * accumulators (`totalRevenue` etc.) and from `reputation` — these describe the
+ * airport's CURRENT service level, not its history:
+ *
+ *   serviceScore          — how well-equipped the airport is (facility-driven)
+ *   passengerSatisfaction  — rolling average over recent completed flights
+ *   onTimeRate             — % of recent flights that finished within budget
+ *
+ * All 0–100. Recomputed at event points (building placed, flight completed),
+ * never re-accumulated per frame (spec §60).
+ */
+export interface OperationsData {
+  serviceScore: number;
+  passengerSatisfaction: number;
+  onTimeRate: number;
+}
+
+/**
+ * Seed values shown until the first recompute. Deliberately the "neutral"
+ * starting point — a fresh airport with no facilities and no flight history.
+ */
+export const DEFAULT_OPERATIONS: OperationsData = {
+  serviceScore: 50,
+  passengerSatisfaction: 75,
+  onTimeRate: 90,
+};
+
+/** Current on-disk state schema version. Older states migrate up in the ctor. */
+export const STATE_VERSION = "0.7.0";
+
 export interface AirportData {
   id: string;
   name: string;
@@ -95,6 +126,8 @@ export interface AirportData {
   totalPassengers?: number;
   /** Lifetime flight departures. Optional for pre-V0.4.1 states. */
   totalFlights?: number;
+  /** Live operating metrics (V0.7-A). Optional for pre-V0.7 states. */
+  operations?: OperationsData;
 }
 
 export interface BuildingData {
@@ -194,6 +227,16 @@ export interface FlightData {
   completedAt?: number;
   /** Ticket revenue attributed to this flight (set once, on completion). */
   revenue?: number;
+  /**
+   * Game-seconds this flight has been active (V0.7-B). Accumulated by
+   * FlightScheduler each frame; used for the on-time judgement, which is
+   * frame-rate / wall-clock independent (works under pumped-sim tests).
+   */
+  elapsedSeconds?: number;
+  /** Whether the flight finished within its time budget (set on completion). */
+  onTime?: boolean;
+  /** Mean passenger satisfaction for this flight (set on completion, V0.7-D). */
+  averageSatisfaction?: number;
 }
 
 export interface GameStateData {
@@ -235,7 +278,7 @@ export function makeBuilding(
  */
 export function createInitialState(): GameStateData {
   return {
-    version: "0.6.0",
+    version: STATE_VERSION,
     airport: {
       id: "airport-1",
       name: "My Airport",
@@ -245,6 +288,7 @@ export function createInitialState(): GameStateData {
       totalRevenue: 0,
       totalPassengers: 0,
       totalFlights: 0,
+      operations: { ...DEFAULT_OPERATIONS },
     },
     buildings: [
       makeBuilding({
@@ -369,10 +413,27 @@ export class GameState {
         g.status = g.aircraftId ? "BOARDING" : "AVAILABLE";
       }
     }
+    // Forward-compat: a state saved before V0.7 has no operations metrics.
+    if (!this.data.airport.operations) {
+      this.data.airport.operations = { ...DEFAULT_OPERATIONS };
+    }
+    if (typeof this.data.airport.reputation !== "number") {
+      this.data.airport.reputation = 0;
+    }
+    // All migrations have run — the state now matches the current schema.
+    this.data.version = STATE_VERSION;
   }
 
   get airport(): AirportData {
     return this.data.airport;
+  }
+
+  /** Live operating metrics — always present (the ctor migrates old states). */
+  get operations(): OperationsData {
+    if (!this.data.airport.operations) {
+      this.data.airport.operations = { ...DEFAULT_OPERATIONS };
+    }
+    return this.data.airport.operations;
   }
 
   getAircraft(id: string): AircraftData | undefined {
