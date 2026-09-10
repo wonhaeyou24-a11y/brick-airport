@@ -36,6 +36,7 @@ import {
 } from "../buildings/BuildingConfig";
 import { computeAirportLevel } from "../progression/AirportProgression";
 import { OperationsManager } from "../operations/OperationsManager";
+import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
@@ -76,6 +77,7 @@ export class Game {
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
   private readonly operations: OperationsManager;
+  private readonly groundOps: GroundOperationManager;
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -159,6 +161,7 @@ export class Game {
     this.scene.add(this.passengerManager.group);
 
     this.economy = new Economy(this.state);
+    this.groundOps = new GroundOperationManager(this.state, this.vehicleManager);
     this.gateStatus = new GateStatusSync(this.state);
 
     this.selection = new SelectionManager(
@@ -622,6 +625,11 @@ export class Game {
     this.flightScheduler.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
+
+    // Ground operations: create + drive each parked aircraft's turnaround, then
+    // move the vehicles it dispatched this frame.
+    const groundTick = this.groundOps.update(deltaTime);
+    for (const notice of groundTick.notices) this.hud.showNotice(notice);
     this.vehicleManager.update(deltaTime);
 
     // Derive each gate's operational status from the aircraft + passengers.

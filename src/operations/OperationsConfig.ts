@@ -143,8 +143,8 @@ export const OPERATIONS_CONFIG = {
       FUEL_TRUCK: 1,
       SERVICE_VEHICLE: 1,
     } as Record<string, number>,
-    /** Units per second a vehicle drives. */
-    speed: 9,
+    /** Units per second a vehicle drives (defaultGroundVehicles seeds this). */
+    speed: 12,
     /** Concurrent operations a vehicle can handle — 1 for now (spec §37). */
     capacity: 1,
   },

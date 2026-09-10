@@ -1,7 +1,12 @@
 import * as THREE from "three";
 import type { GameState, GroundVehicleData, Vec3 } from "../core/GameState";
 import { GroundVehicle } from "./GroundVehicle";
-import { pathToDepot, pathToGate } from "./vehicleWaypoints";
+import {
+  pathToDepot,
+  pathToGate,
+  serviceLanePoint,
+  workPosition,
+} from "./vehicleWaypoints";
 
 /** Distance (world units) at which a vehicle counts as having reached a waypoint. */
 const ARRIVE_EPSILON = 0.06;
@@ -63,6 +68,28 @@ export class GroundVehicleManager {
     vehicle.operationId = operationId;
     vehicle.state = "MOVING";
     this.startPath(vehicle, pathToGate(vehicle.homePosition, gate.parkPosition));
+    return true;
+  }
+
+  /**
+   * Send a vehicle that just finished a task straight to another gate for its
+   * next task, skipping the depot round-trip (spec §54 — simple movement, not
+   * routing). Returns false if the vehicle / operation / gate is missing.
+   */
+  redirect(vehicleId: string, operationId: string): boolean {
+    const vehicle = this.state.getGroundVehicle(vehicleId);
+    if (!vehicle) return false;
+    const op = this.state.getGroundOperation(operationId);
+    const gate = op ? this.state.getGate(op.gateId) : undefined;
+    if (!op || !gate) return false;
+
+    vehicle.operationId = operationId;
+    vehicle.state = "MOVING";
+    this.startPath(vehicle, [
+      serviceLanePoint(vehicle.position.x),
+      serviceLanePoint(gate.parkPosition.x),
+      workPosition(gate.parkPosition),
+    ]);
     return true;
   }
 

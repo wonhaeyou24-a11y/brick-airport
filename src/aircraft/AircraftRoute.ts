@@ -80,12 +80,14 @@ export class AircraftRoute {
   tick(deltaTime: number): void {
     if (this.phase === "DWELL") {
       this.dwellTimer -= deltaTime;
-      // Wait out the dwell AND (from V0.3) hold until every departure
-      // passenger has boarded. areAircraftPassengersReady() returns true when
-      // there are no passengers, so pre-passenger behaviour is unchanged.
+      // Wait out the dwell AND hold until every departure passenger has boarded
+      // (V0.3) AND until the turnaround ground operations are done (V0.8-C).
+      // Both helpers return true when there is nothing to wait for, so earlier
+      // behaviour is unchanged when no passengers / operations exist.
       if (
         this.dwellTimer <= 0 &&
-        this.state.areAircraftPassengersReady(this.craft.data.id)
+        this.state.areAircraftPassengersReady(this.craft.data.id) &&
+        this.state.areGroundOperationsComplete(this.craft.data.id)
       ) {
         this.beginDeparture();
       }

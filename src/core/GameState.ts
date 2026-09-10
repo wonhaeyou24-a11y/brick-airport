@@ -422,7 +422,7 @@ export function defaultGroundVehicles(): GroundVehicleData[] {
       operationId: null,
       capacity: 1,
       homePosition: { ...home },
-      speed: 9,
+      speed: 12,
     };
   });
 }

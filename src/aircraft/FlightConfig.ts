@@ -50,15 +50,15 @@ export interface DestinationConfig {
   revenueMultiplier: number;
 }
 
-// flightDuration is a game-seconds budget for the on-time check. A normal
-// SCHEDULED→FLYING cycle runs ~20–32s, so these leave headroom for a busy
-// airport while a FLIGHT_DELAY (+OPERATIONS_CONFIG.flightDelaySeconds) reliably
-// pushes a flight over its budget.
+// flightDuration is a game-seconds budget for the on-time check. Since V0.8-C a
+// normal SCHEDULED→FLYING cycle runs ~26–40s (arrival + turnaround + boarding +
+// departure), so these leave headroom for a busy airport while a FLIGHT_DELAY
+// (+OPERATIONS_CONFIG.flightDelaySeconds) reliably pushes a flight over budget.
 export const DESTINATIONS: readonly DestinationConfig[] = [
-  { id: "TOKYO", name: "Tokyo", requiredLevel: 1, demand: 1, flightDuration: 44, revenueMultiplier: 1 },
-  { id: "BUSAN", name: "Busan", requiredLevel: 1, demand: 1, flightDuration: 40, revenueMultiplier: 1 },
-  { id: "BANGKOK", name: "Bangkok", requiredLevel: 2, demand: 1, flightDuration: 52, revenueMultiplier: 1 },
-  { id: "PARIS", name: "Paris", requiredLevel: 3, demand: 1, flightDuration: 62, revenueMultiplier: 1 },
+  { id: "TOKYO", name: "Tokyo", requiredLevel: 1, demand: 1, flightDuration: 56, revenueMultiplier: 1 },
+  { id: "BUSAN", name: "Busan", requiredLevel: 1, demand: 1, flightDuration: 52, revenueMultiplier: 1 },
+  { id: "BANGKOK", name: "Bangkok", requiredLevel: 2, demand: 1, flightDuration: 64, revenueMultiplier: 1 },
+  { id: "PARIS", name: "Paris", requiredLevel: 3, demand: 1, flightDuration: 74, revenueMultiplier: 1 },
 ];
 
 /** Destinations unlocked at `level` (never empty — falls back to the first). */
