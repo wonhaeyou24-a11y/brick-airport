@@ -88,4 +88,64 @@ export const OPERATIONS_CONFIG = {
   reputationMaxStep: 1.5,
   /** Weights of the quality target reputation drifts toward. Sum to 1. */
   reputationWeights: { satisfaction: 0.5, onTime: 0.3, service: 0.2 },
+
+  // ----------------------------------------------------- ground operations ---
+  ground: {
+    /** Order turnaround tasks run in — every one must finish before departure. */
+    sequence: [
+      "BAGGAGE",
+      "CLEANING",
+      "REFUELING",
+      "BOARDING_SERVICE",
+    ] as const,
+    /** Work time (game-seconds) each task needs. Short, testable (spec §26). */
+    duration: {
+      BAGGAGE: 1.8,
+      CLEANING: 1.3,
+      REFUELING: 1.8,
+      BOARDING_SERVICE: 1.0,
+    } as Record<string, number>,
+    /** Which vehicle type performs each task. */
+    vehicleForType: {
+      BAGGAGE: "BAGGAGE_CART",
+      CLEANING: "CLEANING_VEHICLE",
+      REFUELING: "FUEL_TRUCK",
+      BOARDING_SERVICE: "SERVICE_VEHICLE",
+    } as Record<string, string>,
+    /** A task PENDING longer than this (game-seconds) counts as delayed (§35). */
+    pendingDelayThreshold: 4,
+    /** Recent finished operations kept for the efficiency calc (§38). */
+    recentWindow: 10,
+    /** Satisfaction points a flight loses if its turnaround had a delayed task (§39). */
+    turnaroundDelayPenalty: 6,
+  },
+
+  // ------------------------------------------------------ ground efficiency ---
+  groundEfficiency: {
+    /** Efficiency with no facilities / vehicles and no history. */
+    base: 55,
+    /** Points per ground vehicle in the fleet… */
+    perVehicle: 4,
+    /** …counting at most this many. */
+    vehicleCap: 8,
+    /** Most the "recent operations ran clean" bonus can add. */
+    completedBonusMax: 18,
+    /** Most the "recent operations were delayed" penalty can subtract. */
+    delayPenaltyMax: 25,
+  },
+
+  // ------------------------------------------------------- ground vehicles ---
+  vehicles: {
+    /** Starting fleet — one of each (spec §18). */
+    initialFleet: {
+      BAGGAGE_CART: 1,
+      CLEANING_VEHICLE: 1,
+      FUEL_TRUCK: 1,
+      SERVICE_VEHICLE: 1,
+    } as Record<string, number>,
+    /** Units per second a vehicle drives. */
+    speed: 9,
+    /** Concurrent operations a vehicle can handle — 1 for now (spec §37). */
+    capacity: 1,
+  },
 } as const;

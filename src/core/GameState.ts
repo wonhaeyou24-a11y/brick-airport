@@ -111,6 +111,56 @@ export type FlightState =
 export type FlightRouteType = PassengerRouteType;
 
 /**
+ * Ground operation (지상조업) — one turnaround task for a parked aircraft
+ * (V0.8-A). A SEPARATE concept from AircraftState / FlightState / vehicle state:
+ * each system keeps its own responsibility and they relate only by id (spec §7,
+ * §17, §75).
+ *
+ *   PENDING -> ASSIGNED -> IN_PROGRESS -> COMPLETED   (CANCELLED is terminal)
+ */
+export type GroundOperationType =
+  | "BAGGAGE"
+  | "CLEANING"
+  | "REFUELING"
+  | "BOARDING_SERVICE";
+
+export type GroundOperationState =
+  | "PENDING"
+  | "ASSIGNED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED";
+
+export interface GroundOperationData {
+  /** Ground-operation id like "gop-001". Namespaced apart from flights / vehicles. */
+  id: string;
+  flightId: string;
+  aircraftId: string;
+  gateId: string;
+  type: GroundOperationType;
+  state: GroundOperationState;
+  /** Epoch ms the task was created (turnaround began). */
+  createdAt: number;
+  /** Epoch ms work actually started (vehicle reached the aircraft). */
+  startedAt?: number;
+  /** Epoch ms the task completed. */
+  completedAt?: number;
+  /** Game-seconds of work the task needs. */
+  duration: number;
+  /** Game-seconds of work done so far — frame-rate / wall-clock independent. */
+  elapsed?: number;
+  /** Ground vehicle assigned to the task, if any (V0.8-B). */
+  vehicleId?: string | null;
+  /** True if the task waited PENDING longer than the delay threshold (V0.8-D). */
+  delayed?: boolean;
+}
+
+/** A ground operation in a terminal state — never transitions again. */
+export function isGroundOperationOver(state: GroundOperationState): boolean {
+  return state === "COMPLETED" || state === "CANCELLED";
+}
+
+/**
  * Live airport operating metrics (V0.7-A). Separate from the lifetime
  * accumulators (`totalRevenue` etc.) and from `reputation` — these describe the
  * airport's CURRENT service level, not its history:
@@ -126,6 +176,8 @@ export interface OperationsData {
   serviceScore: number;
   passengerSatisfaction: number;
   onTimeRate: number;
+  /** How smoothly ground operations run — facilities + vehicles − delays (V0.8-D). */
+  groundEfficiency?: number;
 }
 
 /**
@@ -136,10 +188,11 @@ export const DEFAULT_OPERATIONS: OperationsData = {
   serviceScore: 50,
   passengerSatisfaction: 70,
   onTimeRate: 90,
+  groundEfficiency: 70,
 };
 
 /** Current on-disk state schema version. Older states migrate up in the ctor. */
-export const STATE_VERSION = "0.7.0";
+export const STATE_VERSION = "0.8.0";
 
 export interface AirportData {
   id: string;
@@ -273,6 +326,8 @@ export interface FlightData {
   paxSatisfaction?: number[];
   /** Mean passenger satisfaction for this flight (set on completion, V0.7-D). */
   averageSatisfaction?: number;
+  /** Set if any of this flight's turnaround ground operations was delayed (V0.8-D). */
+  turnaroundDelayed?: boolean;
 }
 
 export interface GameStateData {
@@ -284,9 +339,11 @@ export interface GameStateData {
   passengers: PassengerData[];
   /** All flights, past and present. COMPLETED entries are the history (V0.6-E). */
   flights: FlightData[];
+  /** All turnaround ground operations, past and present (V0.8-A). */
+  groundOperations: GroundOperationData[];
   /** Currently selected entity, for HUD display. */
   selection: {
-    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | null;
+    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | "GROUND_VEHICLE" | null;
     id: string | null;
   };
   /** Grid interaction state (hover / picked cell). */
@@ -417,6 +474,7 @@ export function createInitialState(): GameStateData {
     ],
     passengers: [],
     flights: [],
+    groundOperations: [],
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -453,9 +511,15 @@ export class GameState {
     if (!this.data.airport.operations) {
       this.data.airport.operations = { ...DEFAULT_OPERATIONS };
     }
+    if (this.data.airport.operations.groundEfficiency === undefined) {
+      this.data.airport.operations.groundEfficiency =
+        DEFAULT_OPERATIONS.groundEfficiency;
+    }
     if (typeof this.data.airport.reputation !== "number") {
       this.data.airport.reputation = 0;
     }
+    // Forward-compat: a state saved before V0.8 has no ground operations.
+    if (!this.data.groundOperations) this.data.groundOperations = [];
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
   }
@@ -736,8 +800,62 @@ export class GameState {
     }
   }
 
+  // ------------------------------------------------------ ground operations
+
+  /** A fresh, collision-free ground-operation id like "gop-001". */
+  nextGroundOperationId(): string {
+    let max = 0;
+    for (const o of this.data.groundOperations) {
+      const m = /(\d+)$/.exec(o.id);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `gop-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  addGroundOperation(op: GroundOperationData): void {
+    this.data.groundOperations.push(op);
+  }
+
+  getGroundOperation(id: string | null | undefined): GroundOperationData | undefined {
+    if (!id) return undefined;
+    return this.data.groundOperations.find((o) => o.id === id);
+  }
+
+  /** All ground operations for a flight, in creation order. */
+  getGroundOperationsForFlight(flightId: string): GroundOperationData[] {
+    return this.data.groundOperations.filter((o) => o.flightId === flightId);
+  }
+
+  /** Shallow-merge a patch into a ground operation. No-op if the id is unknown. */
+  updateGroundOperation(id: string, patch: Partial<GroundOperationData>): void {
+    const op = this.getGroundOperation(id);
+    if (op) Object.assign(op, patch);
+  }
+
+  /** Mark a ground operation COMPLETED (idempotent). Frees its vehicle link. */
+  completeGroundOperation(id: string): void {
+    const op = this.getGroundOperation(id);
+    if (!op || isGroundOperationOver(op.state)) return;
+    op.state = "COMPLETED";
+    op.completedAt = Date.now();
+    op.vehicleId = null;
+  }
+
+  /**
+   * True when an aircraft's current flight has no outstanding turnaround work
+   * (every ground operation COMPLETED / CANCELLED, or none exist). AircraftRoute
+   * reads this to hold departure until the turnaround is done (spec §30). Never
+   * blocks an aircraft with no flight or no operations.
+   */
+  areGroundOperationsComplete(aircraftId: string): boolean {
+    const flightId = this.getAircraft(aircraftId)?.currentFlightId;
+    if (!flightId) return true;
+    const ops = this.getGroundOperationsForFlight(flightId);
+    return ops.every((o) => isGroundOperationOver(o.state));
+  }
+
   setSelection(
-    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | null,
+    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | "GROUND_VEHICLE" | null,
     id: string | null,
   ): void {
     this.data.selection = { kind, id };
