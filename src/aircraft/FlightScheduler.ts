@@ -6,12 +6,18 @@ import type {
 } from "../core/GameState";
 import { isFlightOver } from "../core/GameState";
 import { ECONOMY_CONFIG } from "../economy/EconomyConfig";
-import { FLIGHT_CONFIG } from "./FlightConfig";
+import {
+  FLIGHT_CONFIG,
+  availableDestinations,
+  getDestination,
+  type DestinationConfig,
+} from "./FlightConfig";
 import {
   canComplete,
   deriveFlightState,
   type FlightSnapshot,
 } from "./FlightLifecycle";
+import { isFlightOnTime } from "../operations/AirportOperations";
 
 /**
  * FlightScheduler — keeps the airport alive by requesting new arrivals over
@@ -41,6 +47,8 @@ import {
  */
 export interface FlightSchedulerHooks {
   spawnAircraft(data: AircraftData): void;
+  /** Fired once, the frame a flight reaches COMPLETED (V0.7 operations hook). */
+  onFlightCompleted?(flight: FlightData): void;
 }
 
 export class FlightScheduler {
@@ -75,7 +83,7 @@ export class FlightScheduler {
       this.pending -= 1;
     }
 
-    this.syncFlights();
+    this.syncFlights(deltaTime);
   }
 
   /** Manual request (e.g. a future "call a flight" button). */
@@ -133,11 +141,10 @@ export class FlightScheduler {
     return true;
   }
 
-  /** Open a new SCHEDULED departure flight. */
+  /** Open a new SCHEDULED departure flight to a level-appropriate destination. */
   private createFlight(gateId: string | null, aircraftId: string | null): FlightData {
     const now = Date.now();
-    const list = FLIGHT_CONFIG.destinations;
-    const destination = list[this.destinationIndex++ % list.length];
+    const dest = this.pickDestination();
     const flight: FlightData = {
       id: this.state.nextFlightId(),
       aircraftId,
@@ -145,20 +152,27 @@ export class FlightScheduler {
       state: "SCHEDULED",
       routeType: "DEPARTURE",
       origin: FLIGHT_CONFIG.homeCity,
-      destination,
+      destination: dest.id,
       scheduledAt: now,
       createdAt: now,
       passengerIds: [],
+      elapsedSeconds: 0,
     };
     this.state.addFlight(flight);
     return flight;
+  }
+
+  /** Rotate through the destinations unlocked at the airport's current level. */
+  private pickDestination(): DestinationConfig {
+    const pool = availableDestinations(this.state.airport.level);
+    return pool[this.destinationIndex++ % pool.length];
   }
 
   /**
    * Per-frame Flight lifecycle: assign flights to aircraft that need one,
    * advance flight states, attribute revenue, complete finished flights.
    */
-  private syncFlights(): void {
+  private syncFlights(deltaTime: number): void {
     // 1. Every serviceable aircraft gets a current flight (reuse over its life).
     for (const ac of this.state.data.aircraft) {
       const current = ac.currentFlightId
@@ -178,6 +192,9 @@ export class FlightScheduler {
     // 2. Advance / complete each active flight.
     for (const flight of this.state.data.flights) {
       if (isFlightOver(flight.state)) continue;
+
+      // Accumulate active game-time for the on-time judgement (V0.7-B).
+      flight.elapsedSeconds = (flight.elapsedSeconds ?? 0) + deltaTime;
 
       const ac = flight.aircraftId
         ? this.state.getAircraft(flight.aircraftId)
@@ -209,8 +226,12 @@ export class FlightScheduler {
       if (next !== flight.state) flight.state = next;
 
       if (canComplete(flight.state, snap)) {
+        const budget =
+          getDestination(flight.destination)?.flightDuration ?? Infinity;
+        flight.onTime = isFlightOnTime(flight.elapsedSeconds ?? 0, budget);
         this.state.completeFlight(flight.id, flight.revenue ?? 0);
         this.departed.delete(flight.id);
+        this.hooks.onFlightCompleted?.(flight);
       }
     }
   }

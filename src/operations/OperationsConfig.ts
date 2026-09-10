@@ -71,7 +71,7 @@ export const OPERATIONS_CONFIG = {
     SERVICE_BONUS: 30,
   } as Record<string, number>,
   /** Game-seconds added to a flight struck by FLIGHT_DELAY (§41). */
-  flightDelaySeconds: 45,
+  flightDelaySeconds: 55,
   /** Extra flight requests a PASSENGER_SURGE fires (capacity is still respected). */
   passengerSurgeFlights: 3,
   /** Flat bonus to service + satisfaction while SERVICE_BONUS is active (§43). */
