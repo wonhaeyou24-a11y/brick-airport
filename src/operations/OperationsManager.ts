@@ -1,25 +1,37 @@
 import type { FlightData, GameState } from "../core/GameState";
 import {
+  clampScore,
   computeAirportSatisfaction,
   computeFlightSatisfaction,
   computeOnTimeRate,
   computeServiceScore,
+  nextReputation,
 } from "./AirportOperations";
+import { AirportEventManager } from "./AirportEventManager";
 import { OPERATIONS_CONFIG } from "./OperationsConfig";
+
+/** What Game must act on after an operations tick. */
+export interface OperationsTick {
+  /** Short strings to show via the HUD notice system (spec §50). */
+  notices: string[];
+  /** Extra flight requests to fire (PASSENGER_SURGE, spec §42). */
+  extraFlightRequests: number;
+}
 
 /**
  * OperationsManager — orchestrates the V0.7 operations layer: it decides WHEN
  * to recompute and WHERE to store, delegating every formula to the pure
- * AirportOperations module (spec §80).
+ * AirportOperations module and every event to AirportEventManager (spec §80).
  *
  * Recompute points, never per-frame accumulation (spec §60):
  *   - a building is placed        → service score
- *   - a flight completes          → on-time rate (+ satisfaction / reputation
- *                                    in V0.7-D / V0.7-E)
+ *   - a flight completes          → on-time rate, airport satisfaction, reputation
+ *   - a SERVICE_BONUS toggles      → service score + satisfaction (event lift)
  *
  * No Three.js. Reads / writes GameState.operations + airport.reputation only.
  */
 export class OperationsManager {
+  private readonly events = new AirportEventManager();
   /** on-time flags of the most recent completed flights (bounded ring). */
   private readonly recentOnTime: boolean[] = [];
   /** averageSatisfaction of the most recent completed flights (bounded ring). */
@@ -29,10 +41,26 @@ export class OperationsManager {
     this.recomputeServiceScore();
   }
 
+  /** Per-frame: tick events, apply any SERVICE_BONUS lift. */
+  update(deltaTime: number): OperationsTick {
+    const tick = this.events.update(deltaTime, this.state);
+    if (tick.serviceBonusChanged) {
+      this.recomputeServiceScore();
+      this.recomputeAirportSatisfaction();
+    }
+    return {
+      notices: tick.notices,
+      extraFlightRequests: tick.extraFlightRequests,
+    };
+  }
+
   /** The set of service facilities changed — recompute the service score. */
   recomputeServiceScore(): void {
     const counts = this.state.serviceFacilityCounts();
-    this.state.operations.serviceScore = computeServiceScore(counts);
+    this.state.operations.serviceScore = computeServiceScore(
+      counts,
+      this.events.serviceBonusActive,
+    );
   }
 
   /** FlightScheduler hook: a flight just reached COMPLETED. */
@@ -51,7 +79,25 @@ export class OperationsManager {
 
     const o = this.state.operations;
     o.onTimeRate = computeOnTimeRate(this.recentOnTime);
-    o.passengerSatisfaction = computeAirportSatisfaction(this.recentSatisfaction);
+    this.recomputeAirportSatisfaction();
+
+    // Reputation drifts a small step toward the current quality target
+    // (spec §44, §45). Never driven directly by a single flight's result.
+    this.state.airport.reputation = nextReputation(
+      this.state.airport.reputation,
+      o.passengerSatisfaction,
+      o.onTimeRate,
+      o.serviceScore,
+    );
+  }
+
+  /** Airport satisfaction = recent flight averages, plus any event lift. */
+  private recomputeAirportSatisfaction(): void {
+    let s = computeAirportSatisfaction(this.recentSatisfaction);
+    if (this.events.serviceBonusActive) {
+      s = clampScore(s + OPERATIONS_CONFIG.serviceBonusAmount);
+    }
+    this.state.operations.passengerSatisfaction = s;
   }
 
   private pushRecent<T>(ring: T[], value: T): void {

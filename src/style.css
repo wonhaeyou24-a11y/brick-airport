@@ -445,7 +445,8 @@ body {
 
   .build-menu {
     top: auto;
-    bottom: 240px; /* keep clear of the bottom HUD stack (stats + controls) */
+    /* clear the bottom HUD stack — taller since the Operations block (V0.7) */
+    bottom: 304px;
     transform: none;
   }
 

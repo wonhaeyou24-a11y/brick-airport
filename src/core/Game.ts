@@ -419,7 +419,9 @@ export class Game {
         if (flight) {
           lines.push(`Flight: ${flight.id}`);
           lines.push(`Route: ${flightRoute(flight)}`);
-          lines.push(`Status: ${flight.state}`);
+          lines.push(
+            `Status: ${flight.state}${flight.delayed ? " ⚠ delayed" : ""}`,
+          );
         }
         lines.push(`State: ${a.state}`);
         lines.push(`Gate: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
@@ -440,7 +442,11 @@ export class Game {
         lines.push(`Flight: ${flight ? flight.id : "—"}`);
         if (flight) lines.push(`Route: ${flightRoute(flight)}`);
         lines.push(`${p.routeType} · ${p.state}`);
-        if (flight) lines.push(`Flight status: ${flight.state}`);
+        if (flight) {
+          lines.push(
+            `Flight status: ${flight.state}${flight.delayed ? " ⚠ delayed" : ""}`,
+          );
+        }
         lines.push(`Aircraft: ${p.aircraftId ?? "—"}`);
         lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
         if (p.satisfaction !== undefined) {
@@ -541,13 +547,13 @@ export class Game {
       if (a) {
         const b = this.state.getAircraftBoarding(a.id);
         const f = this.state.getFlightByAircraft(a.id);
-        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}`;
+        sig = `${a.state}|${a.homeGateId ?? "-"}|${b.boarded}/${b.total}|${f?.id ?? "-"}:${f?.state ?? "-"}:${f?.delayed ? "D" : "-"}`;
       }
     } else if (sel.selectionKind === "PASSENGER") {
       const p = this.state.getPassenger(sel.id);
       if (p) {
         const f = this.state.getFlight(p.flightId);
-        sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}|${p.satisfaction ?? "-"}`;
+        sig = `${p.state}|${p.aircraftId ?? "-"}|${p.gateId ?? "-"}|${f?.id ?? "-"}:${f?.state ?? "-"}:${f?.delayed ? "D" : "-"}|${p.satisfaction ?? "-"}`;
       }
     } else {
       const building = this.state.getBuilding(sel.id);
@@ -591,6 +597,13 @@ export class Game {
     // Economy: pay ticket revenue for passengers that just boarded.
     const revenue = this.economy.settleBoarding();
     if (revenue > 0) this.hud.showRevenue(revenue);
+
+    // Operations: tick events, surface notices, honour surge flight requests.
+    const opsTick = this.operations.update(deltaTime);
+    for (const notice of opsTick.notices) this.hud.showNotice(notice);
+    for (let i = 0; i < opsTick.extraFlightRequests; i += 1) {
+      this.flightScheduler.requestFlight();
+    }
 
     this.refreshProgression();
     this.refreshSelectionHud();

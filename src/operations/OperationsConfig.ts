@@ -85,7 +85,7 @@ export const OPERATIONS_CONFIG = {
   /** Fraction of the gap to the quality target closed per completed flight. */
   reputationLerp: 0.05,
   /** Hard cap on how far reputation moves in one flight (§45). */
-  reputationMaxStep: 1,
+  reputationMaxStep: 1.5,
   /** Weights of the quality target reputation drifts toward. Sum to 1. */
   reputationWeights: { satisfaction: 0.5, onTime: 0.3, service: 0.2 },
 } as const;

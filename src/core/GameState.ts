@@ -267,6 +267,8 @@ export interface FlightData {
   elapsedSeconds?: number;
   /** Whether the flight finished within its time budget (set on completion). */
   onTime?: boolean;
+  /** Set by a FLIGHT_DELAY event (V0.7-E) — shown in the HUD, hurts on-time. */
+  delayed?: boolean;
   /** Departure-passenger satisfaction scores captured as each one boards (V0.7-D). */
   paxSatisfaction?: number[];
   /** Mean passenger satisfaction for this flight (set on completion, V0.7-D). */
