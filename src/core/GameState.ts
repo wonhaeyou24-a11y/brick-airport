@@ -511,7 +511,7 @@ export function defaultStaff(): StaffData[] {
       hiredAt: now,
       salary,
       homePosition: { ...home },
-      speed: 4.5,
+      speed: 6,
     };
   });
 }

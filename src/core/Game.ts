@@ -635,24 +635,50 @@ export class Game {
     return { title: s.getSelectionLabel() };
   }
 
-  /** Compact per-task state string for a flight's turnaround, for HUD signatures. */
+  /** Compact per-task state + staff string for a flight's turnaround, for HUD signatures. */
   private groundOpSig(flightId: string): string {
     return this.state
       .getGroundOperationsForFlight(flightId)
-      .map((o) => o.state[0])
+      .map((o) => {
+        const staff = o.staffId
+          ? this.state.getStaff(o.staffId)?.state === "WORKING"
+            ? "w"
+            : "a"
+          : "-";
+        return `${o.state[0]}${staff}`;
+      })
       .join("");
   }
 
-  /** "Ground Operations" checklist lines for a flight's turnaround (spec §42). */
+  /**
+   * "Ground Operations" checklist lines for a flight's turnaround, with each
+   * task's staff status (spec §42, §E.4).
+   */
   private groundOpChecklist(flightId: string): string[] {
     const ops = this.state.getGroundOperationsForFlight(flightId);
     if (ops.length === 0) return [];
     const lines = ["Ground Operations"];
     for (const type of TURNAROUND_SEQUENCE) {
       const op = ops.find((o) => o.type === type);
-      if (op) lines.push(`  ${operationGlyph(op.state)} ${opLabel(type)}`);
+      if (!op) continue;
+      lines.push(
+        `  ${operationGlyph(op.state)} ${opLabel(type)}${this.taskStaffNote(op)}`,
+      );
     }
     return lines;
+  }
+
+  private taskStaffNote(op: {
+    state: string;
+    staffId?: string | null;
+  }): string {
+    if (op.state === "COMPLETED" || op.state === "CANCELLED") return "";
+    if (op.staffId) {
+      const working =
+        this.state.getStaff(op.staffId)?.state === "WORKING";
+      return working ? " · staff working" : " · staff on the way";
+    }
+    return " · waiting for staff";
   }
 
   /** "REFUELING" (current task) or "READY" for a gate's turnaround (spec §43). */
@@ -753,6 +779,8 @@ export class Game {
       gateCount: this.state.data.gates.length,
       passengerCount: this.state.data.passengers.length,
       flightCount: airport.totalFlights ?? 0,
+      staffCount: this.staffManager.count,
+      staffActive: this.staffManager.activeCount,
     });
   }
 
@@ -799,7 +827,12 @@ export class Game {
    */
   private refreshGroundOps(): void {
     const rows = this.groundOps.recentActivity(6);
-    const sig = rows.map((r) => `${r.flightId}:${r.type}:${r.state}`).join(",");
+    const sig = rows
+      .map(
+        (r) =>
+          `${r.flightId}:${r.type}:${r.state}:${r.staffName ?? "-"}:${r.needsStaff ? "S" : "-"}`,
+      )
+      .join(",");
     if (sig === this.shownGroundOpsSig) return;
     this.shownGroundOpsSig = sig;
     this.hud.setGroundOperations(
@@ -807,6 +840,10 @@ export class Game {
         flightId: r.flightId,
         task: opLabel(r.type),
         state: r.state,
+        staff: r.staffName
+          ? `${staffRoleLabel(r.role)} · ${r.staffName}`
+          : staffRoleLabel(r.role),
+        needsStaff: r.needsStaff,
       })),
     );
   }
@@ -908,7 +945,7 @@ export class Game {
   /** Refresh the top HUD stats when a tracked value changes. */
   private refreshDynamicStats(): void {
     const a = this.state.airport;
-    const sig = `${a.level}|${a.money}|${this.passengerManager.count}|${this.aircraftManager.count}|${a.totalFlights ?? 0}`;
+    const sig = `${a.level}|${a.money}|${this.passengerManager.count}|${this.aircraftManager.count}|${a.totalFlights ?? 0}|${this.staffManager.count}/${this.staffManager.activeCount}`;
     if (sig === this.shownStatsSig) return;
     this.shownStatsSig = sig;
     this.refreshHudStats();

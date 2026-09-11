@@ -3,6 +3,7 @@ import type {
   GroundOperationData,
   GroundOperationState,
   GroundOperationType,
+  StaffRole,
 } from "../core/GameState";
 import { isFlightOver, isServiceFacility } from "../core/GameState";
 import type { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
@@ -26,11 +27,15 @@ export interface GroundOperationsTick {
   notices: string[];
 }
 
-/** One row of the Ground Operations HUD panel (spec §45). */
+/** One row of the Ground Operations HUD panel (spec §45, §E.3). */
 export interface GroundOpActivity {
   flightId: string;
   type: GroundOperationType;
   state: GroundOperationState;
+  /** Staff role responsible for the task. */
+  role: StaffRole;
+  /** Name of the assigned staff member, if any. */
+  staffName?: string;
   /** True when the task is PENDING because no staff of its role is free (§D.4). */
   needsStaff?: boolean;
 }
@@ -75,6 +80,8 @@ export class GroundOperationManager {
   private readonly recentOps: boolean[] = [];
   /** operationIds currently blocked because no matching staff is free (§D.4). */
   private readonly staffBlocked = new Set<string>();
+  /** Roles a "hire staff" notice has already been shown for. */
+  private readonly staffRequiredAnnounced = new Set<string>();
 
   constructor(
     private readonly state: GameState,
@@ -105,14 +112,7 @@ export class GroundOperationManager {
       const cur = nextPendingOperation(
         this.state.getGroundOperationsForFlight(flightId),
       );
-      if (cur) {
-        rows.push({
-          flightId,
-          type: cur.type,
-          state: cur.state,
-          needsStaff: this.staffBlocked.has(cur.id),
-        });
-      }
+      if (cur) rows.push(this.toActivity(cur));
     }
 
     const done = this.state.data.groundOperations
@@ -124,10 +124,21 @@ export class GroundOperationManager {
       );
     for (const op of done) {
       if (rows.length >= limit) break;
-      rows.push({ flightId: op.flightId, type: op.type, state: op.state });
+      rows.push(this.toActivity(op));
     }
 
     return rows.slice(0, limit);
+  }
+
+  private toActivity(op: GroundOperationData): GroundOpActivity {
+    return {
+      flightId: op.flightId,
+      type: op.type,
+      state: op.state,
+      role: roleForOperation(op.type),
+      staffName: this.state.getStaff(op.staffId)?.name,
+      needsStaff: this.staffBlocked.has(op.id),
+    };
   }
 
   // --------------------------------------------------------------- internals
@@ -179,7 +190,7 @@ export class GroundOperationManager {
             op.id,
             (this.pendingTime.get(op.id) ?? 0) + deltaTime,
           );
-          if (!op.staffId) this.tryAssignStaff(op);
+          if (!op.staffId) this.tryAssignStaff(op, notices);
           if (op.staffId && !op.vehicleId) this.tryAssignVehicle(op);
           if (op.staffId && op.vehicleId) this.markAssigned(op);
           break;
@@ -218,16 +229,25 @@ export class GroundOperationManager {
   }
 
   /** Claim a role-matched idle staff member for a task (spec §C.1, §C.2). */
-  private tryAssignStaff(op: GroundOperationData): void {
+  private tryAssignStaff(op: GroundOperationData, notices: string[]): void {
     const role = roleForOperation(op.type);
     const staff = this.state.idleStaffForRole(role);
     if (!staff) {
       this.staffBlocked.add(op.id); // "STAFF REQUIRED" — the task waits (§D.4)
+      // If the airport has NO staff of this role at all, prompt the player once.
+      if (
+        this.state.getStaffByRole(role).length === 0 &&
+        !this.staffRequiredAnnounced.has(role)
+      ) {
+        this.staffRequiredAnnounced.add(role);
+        notices.push(`⚠ Staff required: ${opWords(role)}`);
+      }
       return;
     }
     if (this.staff.assign(staff.id, op.id)) {
       op.staffId = staff.id;
       this.staffBlocked.delete(op.id);
+      this.staffRequiredAnnounced.delete(role);
     }
   }
 

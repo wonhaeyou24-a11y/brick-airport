@@ -51,8 +51,8 @@ export const STAFF_CONFIG = {
     },
   } as Record<StaffRole, StaffRoleConfig>,
 
-  /** Walking speed, units per second (defaultStaff seeds this). */
-  speed: 4.5,
+  /** Walking speed, units per second (defaultStaff / hireStaff seed this). */
+  speed: 6,
 
   /**
    * Skill → operation-duration modifier (spec §D.3). skill 50 ≈ 1.0 (normal),

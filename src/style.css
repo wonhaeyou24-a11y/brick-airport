@@ -214,7 +214,7 @@ body {
 /* ------------------------------------------------- ground operations --- */
 
 .ground-ops {
-  max-width: 340px;
+  max-width: 380px;
   font-size: 12px;
 }
 
@@ -237,11 +237,18 @@ body {
 }
 
 .gop-row .gop-task {
+  font-weight: 700;
+}
+
+.gop-row .gop-staff {
   flex: 1;
-  opacity: 0.8;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gop-row .gop-state {
+  margin-left: auto;
   font-weight: 800;
   font-size: 10px;
   letter-spacing: 0.5px;
@@ -258,6 +265,10 @@ body {
 .gop-row .gop-pending,
 .gop-row .gop-assigned {
   color: var(--brick-yellow);
+}
+
+.gop-row .gop-needsstaff {
+  color: var(--brick-red);
 }
 
 .hud-context {
@@ -560,22 +571,27 @@ body {
   }
 
   .ground-ops {
-    max-width: 52vw;
+    max-width: 56vw;
   }
 
   .gop-row {
-    flex-direction: column;
-    gap: 0;
-    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    align-items: baseline;
     white-space: normal;
   }
 
-  .gop-row .gop-task {
-    flex: none;
+  .gop-row .gop-staff {
+    flex-basis: 100%;
+    font-size: 10px;
+  }
+
+  .gop-row .gop-state {
+    margin-left: 0;
   }
 
   /* Cap the feed on the small screen (§46). */
-  .ground-ops-list .gop-row:nth-child(n + 5) {
+  .ground-ops-list .gop-row:nth-child(n + 4) {
     display: none;
   }
 

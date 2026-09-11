@@ -12,6 +12,10 @@ export interface HudStats {
   gateCount: number;
   passengerCount: number;
   flightCount: number;
+  /** Total staff (V0.9-E). */
+  staffCount: number;
+  /** Staff currently on a task. */
+  staffActive: number;
 }
 
 /** What to show in the "SELECTED" panel. */
@@ -48,11 +52,15 @@ export interface FlightHistoryEntry {
   satisfaction?: number;
 }
 
-/** One row of the Ground Operations panel (V0.8-E). */
+/** One row of the Ground Operations panel (V0.8-E / V0.9-E). */
 export interface GroundOpRow {
   flightId: string;
   task: string;
   state: string;
+  /** Staff role + name, e.g. "Cleaning Agent · Lee" or "Cleaning Agent". */
+  staff?: string;
+  /** True when the task is waiting for a free staff member (spec §D.4). */
+  needsStaff?: boolean;
 }
 
 /** Live operations metrics shown under the Airport Statistics grid (V0.7 / V0.8). */
@@ -80,6 +88,7 @@ export class HUD {
   private readonly gateEl: HTMLElement;
   private readonly passengerEl: HTMLElement;
   private readonly flightEl: HTMLElement;
+  private readonly staffEl: HTMLElement;
   private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
@@ -116,6 +125,7 @@ export class HUD {
     this.gateEl = this.must(".js-gate");
     this.passengerEl = this.must(".js-passengers");
     this.flightEl = this.must(".js-flights");
+    this.staffEl = this.must(".js-staff");
     this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
     this.statisticsEl = this.must(".js-statistics");
@@ -150,6 +160,7 @@ export class HUD {
     this.gateEl.textContent = String(stats.gateCount);
     this.passengerEl.textContent = String(stats.passengerCount);
     this.flightEl.textContent = String(stats.flightCount);
+    this.staffEl.textContent = `${stats.staffActive}/${stats.staffCount}`;
   }
 
   /** Brief "+$N" pop next to the money stat when ticket revenue lands. */
@@ -271,16 +282,25 @@ export class HUD {
     }
     this.groundOpsEl.hidden = false;
     this.groundOpsListEl.innerHTML = rows
-      .map(
-        (r) =>
+      .map((r) => {
+        const stateText = r.needsStaff
+          ? "STAFF REQ"
+          : r.state.replace(/_/g, " ");
+        const stateClass = r.needsStaff
+          ? "gop-needsstaff"
+          : `gop-${r.state.toLowerCase().replace(/_/g, "-")}`;
+        const staffLine = r.staff
+          ? `<span class="gop-staff">${escapeHtml(r.staff)}</span>`
+          : "";
+        return (
           `<div class="gop-row">` +
           `<span class="gop-flight">${escapeHtml(r.flightId)}</span>` +
           `<span class="gop-task">${escapeHtml(r.task)}</span>` +
-          `<span class="gop-state gop-${r.state.toLowerCase().replace(/_/g, "-")}">${escapeHtml(
-            r.state.replace(/_/g, " "),
-          )}</span>` +
-          `</div>`,
-      )
+          staffLine +
+          `<span class="gop-state ${stateClass}">${escapeHtml(stateText)}</span>` +
+          `</div>`
+        );
+      })
       .join("");
   }
 
@@ -315,6 +335,7 @@ const TEMPLATE = /* html */ `
       <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
       <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>
       <div class="hud-stat"><span>Flights</span><b class="js-flights">0</b></div>
+      <div class="hud-stat"><span>Staff</span><b class="js-staff">0/0</b></div>
     </div>
   </div>
 
