@@ -190,12 +190,16 @@ export class PassengerManager {
       const terminal = pd.routeType === "DEPARTURE" ? "BOARDED" : "ARRIVED";
       if (pd.state !== terminal) continue;
 
+      const routeSeconds = this.routes.get(pd.id)?.elapsed ?? 0;
       const score = computePassengerSatisfaction({
         counts,
-        routeSeconds: this.routes.get(pd.id)?.elapsed ?? 0,
+        routeSeconds,
         jitter: jitterFromId(pd.id),
       });
       pd.satisfaction = score;
+      // HUD-only record of the route time the formula above just consumed
+      // (V1.1-C) — the formula itself already ran, this doesn't feed back in.
+      pd.waitingSeconds = Math.round(routeSeconds * 10) / 10;
       if (pd.routeType === "DEPARTURE" && pd.flightId) {
         this.state.recordPassengerSatisfaction(pd.flightId, score);
       }
