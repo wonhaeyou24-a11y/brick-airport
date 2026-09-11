@@ -29,6 +29,12 @@ export const BUILDING_CONFIG: Record<BuildingType, BuildingConfig> = {
   SECURITY: { cost: 2500, requiredLevel: 1, label: "Security" },
   BAGGAGE: { cost: 3000, requiredLevel: 2, label: "Baggage" },
   LOUNGE: { cost: 4000, requiredLevel: 3, label: "Lounge" },
+  // Passenger-experience amenities (V1.1-A). Progression only reaches level 3
+  // (AirportProgression), so these join LOUNGE there rather than inventing a
+  // level 4 the game never hits (spec §10).
+  FOOD: { cost: 2500, requiredLevel: 2, label: "Food Court" },
+  RESTROOM: { cost: 1500, requiredLevel: 2, label: "Restroom" },
+  SHOP: { cost: 3500, requiredLevel: 3, label: "Shop" },
 };
 
 /** Placeable building types, in BuildMenu display order. */
@@ -40,6 +46,9 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   "SECURITY",
   "BAGGAGE",
   "LOUNGE",
+  "FOOD",
+  "RESTROOM",
+  "SHOP",
 ];
 
 export function getBuildingConfig(type: BuildingType): BuildingConfig {

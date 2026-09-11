@@ -6,9 +6,10 @@ import { brickMaterial, COLORS } from "../world/materials";
 import { getBuildingConfig } from "./BuildingConfig";
 
 /**
- * ServiceFacility — one placeholder class for all four V0.7-C service buildings
- * (check-in, security, baggage, lounge). The type only changes the brick colour
- * and height; the operational effect lives entirely in the operations layer,
+ * ServiceFacility — one placeholder class for every small service / amenity
+ * building (check-in, security, baggage, lounge, and the V1.1-A amenities
+ * shop / food / restroom). The type only changes the brick colour and
+ * height; the operational effect lives entirely in the operations layer,
  * never on this mesh (spec §54).
  */
 const BODY_COLOR: Record<ServiceFacilityType, number> = {
@@ -16,6 +17,9 @@ const BODY_COLOR: Record<ServiceFacilityType, number> = {
   SECURITY: COLORS.facilitySecurity,
   BAGGAGE: COLORS.facilityBaggage,
   LOUNGE: COLORS.facilityLounge,
+  SHOP: COLORS.facilityShop,
+  FOOD: COLORS.facilityFood,
+  RESTROOM: COLORS.facilityRestroom,
 };
 
 const BODY_HEIGHT: Record<ServiceFacilityType, number> = {
@@ -23,6 +27,9 @@ const BODY_HEIGHT: Record<ServiceFacilityType, number> = {
   SECURITY: 1.8,
   BAGGAGE: 2.2,
   LOUNGE: 2.8,
+  SHOP: 2.0,
+  FOOD: 2.0,
+  RESTROOM: 1.6,
 };
 
 export class ServiceFacility extends Building {

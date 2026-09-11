@@ -41,6 +41,10 @@ export const COLORS = {
   facilitySecurity: 0x6a4c93,
   facilityBaggage: 0xe0913a,
   facilityLounge: 0xe15554,
+  // Amenities (V1.1-A).
+  facilityShop: 0x8ecae6,
+  facilityFood: 0xffb703,
+  facilityRestroom: 0x52b788,
   facilityRoof: 0xf4f4f4,
   aircraftBody: 0xffffff,
   aircraftWing: 0xd7dde2,

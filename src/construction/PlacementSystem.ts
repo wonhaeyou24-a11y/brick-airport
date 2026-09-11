@@ -37,6 +37,10 @@ export const BUILDING_FOOTPRINTS: Record<BuildingType, CellSize> = {
   SECURITY: { cols: 2, rows: 2 },
   BAGGAGE: { cols: 2, rows: 2 },
   LOUNGE: { cols: 2, rows: 2 },
+  // Amenities (V1.1-A) — same small pad as the other service facilities.
+  FOOD: { cols: 2, rows: 2 },
+  RESTROOM: { cols: 2, rows: 2 },
+  SHOP: { cols: 2, rows: 2 },
 };
 
 export class PlacementSystem {

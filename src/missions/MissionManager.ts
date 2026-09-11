@@ -1,4 +1,5 @@
 import type { GameState, MissionData, MissionType } from "../core/GameState";
+import { isServiceFacility } from "../core/GameState";
 import {
   MAX_ACTIVE_MISSIONS,
   MISSION_POOL,
@@ -137,6 +138,12 @@ export class MissionManager {
         ).length;
       case "STAFF_TARGET":
         return this.state.data.staff.length;
+      case "FACILITY_TARGET":
+        return this.state.data.buildings.filter((b) =>
+          isServiceFacility(b.type),
+        ).length;
+      case "SATISFACTION_TARGET":
+        return this.state.operations.passengerSatisfaction;
     }
   }
 
@@ -153,6 +160,7 @@ export class MissionManager {
       this.state.data.buildings.length,
       completedOps,
       this.state.data.staff.length,
+      Math.round(this.state.operations.passengerSatisfaction),
     ].join("|");
   }
 }

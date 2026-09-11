@@ -23,6 +23,10 @@ export const OPERATIONS_CONFIG = {
     SECURITY: 10,
     BAGGAGE: 10,
     LOUNGE: 15,
+    // Amenities (V1.1-A) — modest, on the scale of Check-in/Security.
+    SHOP: 4,
+    FOOD: 5,
+    RESTROOM: 3,
   } as Record<string, number>,
 
   // ------------------------------------------------- passenger satisfaction ---
@@ -38,6 +42,10 @@ export const OPERATIONS_CONFIG = {
     SECURITY: 5,
     BAGGAGE: 5,
     LOUNGE: 10,
+    // Amenities (V1.1-A) — comfort-focused, on the scale of the above.
+    SHOP: 3,
+    FOOD: 5,
+    RESTROOM: 4,
   } as Record<string, number>,
   /** Each further same-kind facility adds this fraction of the previous one. */
   facilityStackFalloff: 0.5,

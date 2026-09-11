@@ -40,7 +40,15 @@ export type GateStatus =
  * build pipeline; their *operational effect* is computed separately in the
  * operations layer, never stored on the building (spec §54).
  */
-export type ServiceFacilityType = "CHECK_IN" | "SECURITY" | "BAGGAGE" | "LOUNGE";
+export type ServiceFacilityType =
+  | "CHECK_IN"
+  | "SECURITY"
+  | "BAGGAGE"
+  | "LOUNGE"
+  // Amenities (V1.1-A) — comfort/service facilities, same build pipeline.
+  | "SHOP"
+  | "FOOD"
+  | "RESTROOM";
 
 export type BuildingType =
   | "TERMINAL"
@@ -53,6 +61,9 @@ export const SERVICE_FACILITY_TYPES: readonly ServiceFacilityType[] = [
   "SECURITY",
   "BAGGAGE",
   "LOUNGE",
+  "SHOP",
+  "FOOD",
+  "RESTROOM",
 ];
 
 const SERVICE_FACILITY_SET: ReadonlySet<string> = new Set(SERVICE_FACILITY_TYPES);
@@ -248,7 +259,11 @@ export type MissionType =
   | "REVENUE_TARGET"
   | "BUILD_TARGET"
   | "OPERATION_TARGET"
-  | "STAFF_TARGET";
+  | "STAFF_TARGET"
+  // V1.1-D: facility / passenger-experience objectives, same absolute-target
+  // shape as every other mission — no new MissionData fields.
+  | "FACILITY_TARGET"
+  | "SATISFACTION_TARGET";
 
 export type MissionState =
   | "AVAILABLE"
@@ -342,7 +357,7 @@ export const DEFAULT_OPERATIONS: OperationsData = {
 };
 
 /** Current on-disk state schema version. Older states migrate up in the ctor. */
-export const STATE_VERSION = "1.0.0";
+export const STATE_VERSION = "1.1.0";
 
 export interface AirportData {
   id: string;
@@ -431,6 +446,13 @@ export interface PassengerData {
    * a terminal state (BOARDED / ARRIVED). Undefined until then.
    */
   satisfaction?: number;
+  /**
+   * Game-seconds this passenger's route took, captured the same frame as
+   * `satisfaction` (V1.1-C). HUD-only — the satisfaction formula already
+   * consumed the live value when it ran; this is just so a selected passenger
+   * can still show its own wait after the fact.
+   */
+  waitingSeconds?: number;
 }
 
 /**
@@ -838,6 +860,9 @@ export class GameState {
       SECURITY: 0,
       BAGGAGE: 0,
       LOUNGE: 0,
+      SHOP: 0,
+      FOOD: 0,
+      RESTROOM: 0,
     };
     for (const b of this.data.buildings) {
       if (isServiceFacility(b.type)) counts[b.type] += 1;

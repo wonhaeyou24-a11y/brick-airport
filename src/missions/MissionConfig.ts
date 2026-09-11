@@ -32,6 +32,11 @@ export const MISSION_POOL: readonly MissionTemplate[] = [
   { type: "FLIGHT_TARGET", target: 25, title: "Regional Hub", rewardMoney: 1800, rewardReputation: 7 },
   { type: "PASSENGER_TARGET", target: 150, title: "Passenger Milestone", rewardMoney: 2200, rewardReputation: 8 },
   { type: "REVENUE_TARGET", target: 14000, title: "Airport Fortune", rewardMoney: 2500, rewardReputation: 8 },
+  // Facility / passenger-experience objectives (V1.1-D).
+  { type: "FACILITY_TARGET", target: 2, title: "Passenger Amenities", rewardMoney: 700, rewardReputation: 4 },
+  { type: "SATISFACTION_TARGET", target: 75, title: "Happy Travelers", rewardMoney: 900, rewardReputation: 4 },
+  { type: "FACILITY_TARGET", target: 4, title: "Airport Services", rewardMoney: 1500, rewardReputation: 6 },
+  { type: "SATISFACTION_TARGET", target: 85, title: "Five-Star Airport", rewardMoney: 2000, rewardReputation: 7 },
 ];
 
 /** Max ACTIVE missions at once (spec §B.2). */
@@ -52,5 +57,9 @@ export function missionDescription(type: MissionType, target: number): string {
       return `Complete ${target} ground operations`;
     case "STAFF_TARGET":
       return `Employ ${target} staff`;
+    case "FACILITY_TARGET":
+      return `Build ${target} service facilities`;
+    case "SATISFACTION_TARGET":
+      return `Reach ${target} average passenger satisfaction`;
   }
 }
