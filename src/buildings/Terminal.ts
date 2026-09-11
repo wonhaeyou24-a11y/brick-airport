@@ -75,6 +75,44 @@ export class Terminal extends Building {
     equipment.castShadow = true;
     group.add(equipment);
 
+    // Low side wings at both ends — breaks the terminal up into a layered
+    // building mass instead of one long slab (spec §7's "layered building
+    // mass"), still fully inside the same BuildingData footprint.
+    const wingH = h * 0.55;
+    for (const sx of [-1, 1]) {
+      const wing = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.16, wingH, d * 0.92),
+        brickMaterial(COLORS.terminalBody, { roughness: 0.75 }),
+      );
+      wing.position.set(sx * (w / 2 - w * 0.08), wingH / 2, 0);
+      wing.castShadow = true;
+      wing.receiveShadow = true;
+      group.add(wing);
+
+      const wingRoof = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.18, 0.3, d * 0.98),
+        brickMaterial(COLORS.facilityRoof, { roughness: 0.6 }),
+      );
+      wingRoof.position.set(sx * (w / 2 - w * 0.08), wingH + 0.15, 0);
+      group.add(wingRoof);
+    }
+
+    // Raised central roof block carrying the terminal name — the reference
+    // image's blue upper-deck massing above the main entrance.
+    const crown = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.34, h * 0.5, d * 0.6),
+      brickMaterial(COLORS.terminalGlass, { roughness: 0.3, metalness: 0.1 }),
+    );
+    crown.position.set(0, h + 0.2 + (h * 0.5) / 2, 0);
+    crown.castShadow = true;
+    group.add(crown);
+    const crownRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.38, 0.3, d * 0.66),
+      brickMaterial(COLORS.terminalRoof, { roughness: 0.6 }),
+    );
+    crownRoof.position.set(0, h + 0.2 + h * 0.5 + 0.15, 0);
+    group.add(crownRoof);
+
     // Entrance canopy
     const entrance = new THREE.Mesh(
       new THREE.BoxGeometry(w * 0.3, 1.2, 1.4),
@@ -82,6 +120,17 @@ export class Terminal extends Building {
     );
     entrance.position.set(0, 0.6, -d / 2 - 0.7);
     group.add(entrance);
+
+    // Canopy support columns — the reference image's covered drop-off walk.
+    const columnMat = brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.2 });
+    for (const cx of [-1, 1]) {
+      const column = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8),
+        columnMat,
+      );
+      column.position.set(cx * w * 0.13, 0.6, -d / 2 - 1.3);
+      group.add(column);
+    }
 
     // Entrance doors — two dark panels under the canopy.
     for (const sx of [-1, 1]) {

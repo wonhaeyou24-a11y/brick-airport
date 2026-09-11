@@ -76,17 +76,52 @@ export class Gate extends Building {
     stopLine.position.set(0, 0.26, -0.7);
     group.add(stopLine);
 
-    // Jet bridge stub, reaching toward +Z (toward the terminal) at rest;
-    // Gate.tickAnimation() slides it toward BRIDGE_EXTENDED_Z while boarding
-    // is active (V1.9 §9), read fresh from GateStatus each time it changes.
-    const bridge = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.9, 2.2),
-      brickMaterial(COLORS.gateBridge, { roughness: 0.5 }),
-    );
+    // Jet bridge — a small assembly (connector cuff + tapered tunnel body +
+    // accordion joint + support leg + wheel) grouped under one moving root,
+    // reaching toward +Z (toward the terminal) at rest; Gate.tickAnimation()
+    // slides the whole group toward BRIDGE_EXTENDED_Z while boarding is
+    // active (V1.9 §9 animation preserved, V2.0 §10 visual only).
+    const bridge = new THREE.Group();
     bridge.name = JET_BRIDGE_NAME;
     bridge.position.set(0, 1.1, BRIDGE_HOME_Z);
-    bridge.castShadow = true;
     group.add(bridge);
+
+    const bridgeMat = brickMaterial(COLORS.gateBridge, { roughness: 0.5 });
+    const tunnel = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 1.6), bridgeMat);
+    tunnel.position.z = 0;
+    tunnel.castShadow = true;
+    bridge.add(tunnel);
+
+    const tunnelWindow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.35, 1.5),
+      brickMaterial(COLORS.terminalGlass, { roughness: 0.25, metalness: 0.1 }),
+    );
+    tunnelWindow.position.set(0, 0.15, 0);
+    bridge.add(tunnelWindow);
+
+    // Accordion joint where the tunnel meets the aircraft door.
+    const joint = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.44, 0.44, 0.3, 10),
+      brickMaterial(COLORS.terminalDark, { roughness: 0.6 }),
+    );
+    joint.rotation.x = Math.PI / 2;
+    joint.position.set(0, 0, -0.95);
+    bridge.add(joint);
+
+    // Support leg + wheel holding the far end up off the apron.
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 0.9, 6),
+      brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.2 }),
+    );
+    leg.position.set(0, -0.7, -0.7);
+    bridge.add(leg);
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.16, 0.14, 10),
+      brickMaterial(0x22333b, { roughness: 0.7 }),
+    );
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(0, -1.05, -0.7);
+    bridge.add(wheel);
 
     // Small accordion-look ring where the bridge meets the pad.
     const cuff = new THREE.Mesh(

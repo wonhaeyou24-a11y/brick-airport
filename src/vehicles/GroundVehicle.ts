@@ -80,6 +80,10 @@ export class GroundVehicle implements Selectable {
   private readonly wheels: THREE.Mesh[] = [];
   private readonly lastPos = new THREE.Vector3();
   private wheelSpin = 0;
+  /** V2.0 STEP 1 §15 — rooftop amber beacon, blinks only while actually
+   * moving so an idle-parked vehicle doesn't read as "in an emergency". */
+  private beaconMat: THREE.MeshStandardMaterial | null = null;
+  private beaconClock = 0;
 
   constructor(data: GroundVehicleData) {
     this.data = data;
@@ -112,6 +116,22 @@ export class GroundVehicle implements Selectable {
     );
     cab.position.set(0, h * 0.7 + 0.12, l / 2 - 0.2);
     this.object.add(cab);
+
+    // Windshield — reads as an actual driver's cab rather than a plain box
+    // (V2.0 §16's "Cab" detail).
+    const windshield = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.72, h * 0.32, 0.06),
+      brickMaterial(COLORS.terminalGlass, { roughness: 0.2, metalness: 0.15 }),
+    );
+    windshield.position.set(0, h * 0.85 + 0.12, l / 2 + 0.04);
+    this.object.add(windshield);
+
+    // Rooftop amber beacon — a common airport-service-vehicle cue (spec §16).
+    this.beaconMat = brickMaterial(0xffb703, { roughness: 0.3 }).clone();
+    this.beaconMat.emissive.setHex(0xffb703);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), this.beaconMat);
+    beacon.position.set(0, h * 1.15 + 0.12, l / 2 - 0.2);
+    this.object.add(beacon);
 
     if (spec.trailer) {
       const [tw, th, tl] = spec.trailer;
@@ -163,10 +183,22 @@ export class GroundVehicle implements Selectable {
    * Cosmetic wheel spin, scaled by how far the vehicle actually moved this
    * frame — purely visual, never touches GroundVehicleData (spec §16/§31).
    */
-  tickAnimation(): void {
+  tickAnimation(deltaTime: number): void {
     const p = this.object.position;
     const moved = p.distanceTo(this.lastPos);
     this.lastPos.copy(p);
+
+    if (this.beaconMat) {
+      if (moved > 0) {
+        this.beaconClock += deltaTime;
+        const phase = (this.beaconClock % 0.6) / 0.6;
+        this.beaconMat.emissiveIntensity = phase < 0.5 ? 1 : 0.15;
+      } else {
+        this.beaconClock = 0;
+        this.beaconMat.emissiveIntensity = 0.15;
+      }
+    }
+
     if (moved <= 0) return;
     this.wheelSpin += moved * 4;
     for (const wheel of this.wheels) wheel.rotation.x = this.wheelSpin;
@@ -196,6 +228,7 @@ export class GroundVehicle implements Selectable {
 
   dispose(): void {
     disposeHighlight(this.object);
+    this.beaconMat?.dispose();
     this.object.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.isMesh && mesh.geometry) mesh.geometry.dispose();

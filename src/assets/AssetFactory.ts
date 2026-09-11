@@ -201,38 +201,78 @@ export function createShrub(color = 0x5aa469): THREE.Mesh {
 export function createControlTower(): THREE.Group {
   const group = new THREE.Group();
 
+  // Wide base pad — grounds the tower instead of the shaft just meeting the
+  // apron (V2.0 §8's "Base").
+  const base = new THREE.Mesh(
+    cachedCylinder(1.1, 1.3, 0.6, 10),
+    brickMaterial(0xbfc7cc, { roughness: 0.7 }),
+  );
+  base.position.y = 0.3;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  // Taller shaft than V1.x, so the tower clearly out-scales the Terminal
+  // (V2.0 §8 landmark requirement).
   const shaft = new THREE.Mesh(
-    cachedCylinder(0.55, 0.75, 6, 8),
+    cachedCylinder(0.5, 0.7, 7.4, 8),
     brickMaterial(0xd9dde0, { roughness: 0.6 }),
   );
-  shaft.position.y = 3;
+  shaft.position.y = 4.3;
   shaft.castShadow = true;
   group.add(shaft);
 
+  // A support strut braced against the shaft — real control towers read as
+  // structural, not just a stacked cylinder.
+  const strut = new THREE.Mesh(
+    cachedCylinder(0.09, 0.09, 4.6, 6),
+    brickMaterial(0xbfc7cc, { roughness: 0.6 }),
+  );
+  strut.position.set(0.45, 3.6, 0.45);
+  strut.rotation.set(0.28, 0, -0.28);
+  group.add(strut);
+
   const cab = new THREE.Mesh(
-    cachedCylinder(1.1, 1.1, 1.3, 10),
+    cachedCylinder(1.2, 1.2, 1.5, 12),
     brickMaterial(0x6fb8d6, { roughness: 0.25, metalness: 0.15 }),
   );
-  cab.position.y = 6.65;
+  cab.position.y = 8.75;
   cab.castShadow = true;
   group.add(cab);
 
+  // Glazing bands around the cab — 8 dark mullion strips reading as window
+  // seams (V2.0 §8's "Glass Windows"), cheaper than a full radial window row.
+  const mullionMat = brickMaterial(0x274156, { roughness: 0.4, metalness: 0.1 });
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const mullion = new THREE.Mesh(cachedBox(0.05, 1.5, 0.05), mullionMat);
+    mullion.position.set(Math.cos(angle) * 1.2, 8.75, Math.sin(angle) * 1.2);
+    group.add(mullion);
+  }
+
+  const deckLip = new THREE.Mesh(
+    cachedCylinder(1.35, 1.35, 0.12, 12),
+    brickMaterial(0xd9dde0, { roughness: 0.6 }),
+  );
+  deckLip.position.y = 8.0;
+  group.add(deckLip);
+
   const roof = new THREE.Mesh(
-    cachedCylinder(1.2, 1.2, 0.15, 10),
+    cachedCylinder(1.3, 1.3, 0.18, 12),
     brickMaterial(0xe63946, { roughness: 0.6 }),
   );
-  roof.position.y = 7.4;
+  roof.position.y = 9.6;
   group.add(roof);
 
   const antenna = new THREE.Mesh(
-    cachedCylinder(0.03, 0.03, 1.2, 6),
+    cachedCylinder(0.03, 0.03, 1.4, 6),
     brickMaterial(0x3a4046, { roughness: 0.5, metalness: 0.3 }),
   );
-  antenna.position.y = 8.1;
+  antenna.position.y = 10.4;
   group.add(antenna);
 
-  const beacon = createStud(0xffb703, 0.09);
-  beacon.position.y = 8.75;
+  const beacon = createStud(0xffb703, 0.1);
+  beacon.position.y = 11.15;
   group.add(beacon);
 
   return group;

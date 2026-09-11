@@ -33,6 +33,16 @@ const VARIANT_SPEC: Record<AircraftVariant, VariantSpec> = {
   LARGE: { scale: 1.25, engineCount: 2 },
 };
 
+/**
+ * V2.0 STEP 1 §25 — a MEDIUM aircraft's fuselage diameter (0.7 units) used to
+ * be narrower than a standing Passenger is tall (~1.3 units), so a minifig
+ * next to a plane read as roughly the same size as the plane itself. This
+ * uniformly enlarges every offset in buildPlaceholder() (all of which are
+ * already `* s`) without touching AircraftData, movement, or animation
+ * targets — purely a bigger `s`.
+ */
+const SIZE_BOOST = 1.45;
+
 /** Seconds a full blink cycle (on+off) takes for the tail beacon. */
 const BLINK_PERIOD = 1.4;
 /** Radians/sec the engine fan discs spin — purely cosmetic (spec §13). */
@@ -82,7 +92,7 @@ export class Aircraft implements Selectable {
   private buildPlaceholder(group: THREE.Group): void {
     const variant = variantFor(this.data.capacity ?? 6);
     const spec = VARIANT_SPEC[variant];
-    const s = spec.scale;
+    const s = spec.scale * SIZE_BOOST;
 
     const fuselage = new THREE.Mesh(
       new THREE.CylinderGeometry(0.35 * s, 0.35 * s, 3.4 * s, 12),
@@ -101,13 +111,38 @@ export class Aircraft implements Selectable {
     nose.position.set(2.05 * s, 0.7 * s, 0);
     group.add(nose);
 
+    const wingMat = brickMaterial(COLORS.aircraftWing, { roughness: 0.5 });
+
+    // Main wing, narrower chord + longer span than the old single slab —
+    // reads as a real wing instead of a plank (spec §12).
     const wing = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1 * s, 0.12 * s, 4.6 * s),
-      brickMaterial(COLORS.aircraftWing, { roughness: 0.5 }),
+      new THREE.BoxGeometry(1.0 * s, 0.12 * s, 5.0 * s),
+      wingMat,
     );
     wing.position.set(0, 0.7 * s, 0);
     wing.castShadow = true;
     group.add(wing);
+
+    // Tapered outer wing panels + upturned winglets at each tip (spec §12's
+    // "real aircraft silhouette + block toy material") — purely decorative,
+    // not part of `engines`/`gear` so tickAnimation never touches them.
+    for (const side of [-1, 1]) {
+      const tip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6 * s, 0.09 * s, 0.9 * s),
+        wingMat,
+      );
+      tip.position.set(-0.08 * s, 0.7 * s, side * 2.7 * s);
+      tip.castShadow = true;
+      group.add(tip);
+
+      const winglet = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06 * s, 0.5 * s, 0.32 * s),
+        brickMaterial(COLORS.aircraftTail, { roughness: 0.45 }),
+      );
+      winglet.position.set(-0.08 * s, 0.95 * s, side * 3.05 * s);
+      winglet.rotation.z = side * 0.32;
+      group.add(winglet);
+    }
 
     const tailplane = new THREE.Mesh(
       new THREE.BoxGeometry(0.7 * s, 0.1 * s, 1.9 * s),

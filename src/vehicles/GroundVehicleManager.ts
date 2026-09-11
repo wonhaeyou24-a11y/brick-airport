@@ -53,7 +53,7 @@ export class GroundVehicleManager {
     }
     for (const vehicle of this.vehicles.values()) {
       vehicle.syncFromData();
-      vehicle.tickAnimation();
+      vehicle.tickAnimation(deltaTime);
     }
   }
 
