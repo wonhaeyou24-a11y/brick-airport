@@ -171,6 +171,36 @@ export interface ActionItem {
   targetId?: string;
 }
 
+/** Left-nav category ids (V1.9-D STEP 2 §8) — each opens the drawer section
+ * that already-existing panel data renders into. "build" is handled
+ * separately (it just opens the existing BuildMenu, per spec §9's own
+ * "건설 → 기존 BuildMenu" instruction — no drawer section for it). */
+export type NavCategory =
+  | "flights"
+  | "passengers"
+  | "staff"
+  | "facility"
+  | "mission"
+  | "event"
+  | "stats";
+
+/**
+ * One "Live Activity" card (V1.9-D STEP 2 §14-20) — always a REAL selectable
+ * GameState object, never a placeholder (§29). Game computes at most one per
+ * kind (the categories the reference image itself uses) from the same
+ * managers Selection already reads; clicking a card reuses the existing
+ * SelectionManager/CameraController, never a new selection path (§19).
+ */
+export type ActivityKind = "AIRCRAFT" | "PASSENGER" | "VEHICLE" | "STAFF";
+export interface ActivityCard {
+  kind: ActivityKind;
+  targetId: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+  lines: string[];
+}
+
 export interface HudCallbacks {
   onZoomIn(): void;
   onZoomOut(): void;
@@ -181,6 +211,13 @@ export interface HudCallbacks {
   onLoad(): void;
   /** V1.8 §10 — navigate to whatever an Action Center row points at. */
   onActionClick(item: ActionItem): void;
+  /** V1.9-D STEP 2 §9 — open the existing BuildMenu from the left nav. */
+  onOpenBuild(): void;
+  /** V1.9-D STEP 2 §19 — select the real object an Activity Card represents. */
+  onActivityCardClick(kind: ActivityKind, targetId: string): void;
+  /** A drawer section just opened — let Game close the (separate) BuildMenu
+   * panel so only one nav-triggered panel is ever visible at once. */
+  onDrawerOpen(): void;
 }
 
 export class HUD {
@@ -191,11 +228,9 @@ export class HUD {
   private readonly gateEl: HTMLElement;
   private readonly passengerEl: HTMLElement;
   private readonly flightEl: HTMLElement;
-  private readonly staffEl: HTMLElement;
   private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
-  private readonly statisticsEl: HTMLElement;
   private readonly statFlightsEl: HTMLElement;
   private readonly statPassengersEl: HTMLElement;
   private readonly statRevenueEl: HTMLElement;
@@ -227,9 +262,44 @@ export class HUD {
   private readonly actionCenterEl: HTMLElement;
   private readonly actionCenterListEl: HTMLElement;
   private readonly actionCenterTitleEl: HTMLElement;
-  /** V1.8 §34-35 — user-collapsible so it never has to permanently cover the
-   * 3D view on a small screen; defaults open (same as every other panel). */
-  private actionCenterCollapsed = false;
+  /** V1.8 §34-35 / V1.9-D STEP 2 §11 — user-collapsible so it never has to
+   * permanently cover the 3D view; defaults COLLAPSED now (reference image
+   * treats it as a small "확인 필요 N" indicator, expanded on click). */
+  private actionCenterCollapsed = true;
+
+  // ---- V1.9-D STEP 2: top bar level progress, left nav + drawer, activity
+  // cards, action badge. All of the above panels move INTO the drawer (see
+  // buildTemplate) — their own setX() methods are unchanged, only where they
+  // render moved, so this section only adds the new chrome around them.
+  private readonly levelBarEl: HTMLElement;
+  private readonly levelProgressTextEl: HTMLElement;
+  private readonly statRevenueTopEl: HTMLElement;
+  private readonly drawerEl: HTMLElement;
+  private readonly drawerTitleEl: HTMLElement;
+  private readonly navButtons: HTMLButtonElement[];
+  private readonly drawerSections: Record<NavCategory, HTMLElement>;
+  private readonly drawerLabels: Record<NavCategory, string> = {
+    flights: "항공편",
+    passengers: "승객",
+    staff: "직원",
+    facility: "시설",
+    mission: t("missions"),
+    event: t("operationalEvent"),
+    stats: t("airportStatistics"),
+  };
+  private openCategory: NavCategory | null = null;
+  private readonly activityCardsEl: HTMLElement;
+  private readonly drawerPaxCountEl: HTMLElement;
+  private readonly drawerPaxAvgEl: HTMLElement;
+  private readonly drawerPaxBoardingEl: HTMLElement;
+  private readonly drawerStaffCountEl: HTMLElement;
+  private readonly drawerStaffActiveEl: HTMLElement;
+  private readonly drawerGatesEl: HTMLElement;
+  private readonly drawerOpsEl: HTMLElement;
+  private readonly helpBarEl: HTMLElement;
+  /** Kept so a click on an activity card can be mapped back to its target
+   * (same event-delegation pattern as the Action Center list above). */
+  private activityCards: ActivityCard[] = [];
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -243,7 +313,7 @@ export class HUD {
 
   constructor(
     container: HTMLElement,
-    callbacks: HudCallbacks,
+    private readonly callbacks: HudCallbacks,
     private readonly audio: AudioManager,
   ) {
     this.root = container;
@@ -256,10 +326,9 @@ export class HUD {
     this.gateEl = this.must(".js-gate");
     this.passengerEl = this.must(".js-passengers");
     this.flightEl = this.must(".js-flights");
-    this.staffEl = this.must(".js-staff");
     this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
-    this.statisticsEl = this.must(".js-statistics");
+    this.must(".js-statistics"); // validated to exist; content lives in the 통계 drawer section
     this.statFlightsEl = this.must(".js-stat-flights");
     this.statPassengersEl = this.must(".js-stat-passengers");
     this.statRevenueEl = this.must(".js-stat-revenue");
@@ -296,6 +365,49 @@ export class HUD {
       this.renderActionCenter();
     });
 
+    // V1.9-D STEP 2: top bar level progress + left nav / drawer + activity
+    // cards + action badge.
+    this.levelBarEl = this.must(".js-level-bar");
+    this.levelProgressTextEl = this.must(".js-level-progress-text");
+    this.statRevenueTopEl = this.must(".js-stat-revenue-top");
+    this.drawerEl = this.must(".js-drawer");
+    this.drawerTitleEl = this.must(".js-drawer-title");
+    this.activityCardsEl = this.must(".js-activity-cards");
+    this.drawerPaxCountEl = this.must(".js-drawer-pax-count");
+    this.drawerPaxAvgEl = this.must(".js-drawer-pax-avg");
+    this.drawerPaxBoardingEl = this.must(".js-drawer-pax-boarding");
+    this.drawerStaffCountEl = this.must(".js-drawer-staff-count");
+    this.drawerStaffActiveEl = this.must(".js-drawer-staff-active");
+    this.drawerGatesEl = this.must(".js-drawer-gates");
+    this.drawerOpsEl = this.must(".js-drawer-ops");
+    this.helpBarEl = this.must(".js-help-bar");
+
+    this.drawerSections = {
+      flights: this.must(".js-drawer-flights"),
+      passengers: this.must(".js-drawer-passengers"),
+      staff: this.must(".js-drawer-staff"),
+      facility: this.must(".js-drawer-facility"),
+      mission: this.must(".js-drawer-mission"),
+      event: this.must(".js-drawer-event"),
+      stats: this.must(".js-drawer-stats"),
+    };
+
+    this.navButtons = [...this.root.querySelectorAll<HTMLButtonElement>(".js-nav-cat")];
+    for (const btn of this.navButtons) {
+      const cat = btn.dataset.cat as NavCategory;
+      btn.addEventListener("click", () => this.toggleDrawer(cat));
+    }
+    this.must(".js-nav-build").addEventListener("click", callbacks.onOpenBuild);
+    this.must(".js-drawer-close").addEventListener("click", () => this.closeDrawer());
+
+    // Event delegation for activity cards — same pattern as Action Center.
+    this.activityCardsEl.addEventListener("click", (ev) => {
+      const card = (ev.target as HTMLElement).closest<HTMLElement>(".activity-card");
+      const idx = card ? Number(card.dataset.index) : NaN;
+      const item = Number.isInteger(idx) ? this.activityCards[idx] : undefined;
+      if (item) callbacks.onActivityCardClick(item.kind, item.targetId);
+    });
+
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
     this.must(".js-reset").addEventListener("click", callbacks.onReset);
@@ -318,8 +430,93 @@ export class HUD {
     // (its panel is appended into this same container — see Game's
     // construction order), so no per-button wiring is needed anywhere else.
     this.root.addEventListener("click", (ev) => {
-      if ((ev.target as HTMLElement).closest(".brick-btn")) this.audio.playClick();
+      if ((ev.target as HTMLElement).closest(".brick-btn, .nav-item, .util-btn, .zoom-btn")) {
+        this.audio.playClick();
+      }
     });
+  }
+
+  // --------------------------------------------- V1.9-D STEP 2: nav + drawer
+
+  /**
+   * Open `category`'s drawer section, or close the drawer if that category
+   * is already open (spec §10 — one drawer at a time, closed by default).
+   * Every section's own content still comes from its existing setX() method;
+   * this only switches which section is visible inside the shared drawer.
+   */
+  private toggleDrawer(category: NavCategory): void {
+    if (this.openCategory === category) {
+      this.closeDrawer();
+      return;
+    }
+    this.openCategory = category;
+    this.drawerEl.hidden = false;
+    this.drawerTitleEl.textContent = this.drawerLabels[category];
+    for (const [cat, el] of Object.entries(this.drawerSections)) {
+      el.hidden = cat !== category;
+    }
+    for (const btn of this.navButtons) {
+      btn.classList.toggle("is-active", btn.dataset.cat === category);
+    }
+    this.callbacks.onDrawerOpen();
+  }
+
+  /** Public so Game can close the drawer when the separate BuildMenu panel
+   * opens (V1.9-D STEP 2 §10 — only one nav-triggered panel at a time). */
+  closeDrawer(): void {
+    this.openCategory = null;
+    this.drawerEl.hidden = true;
+    for (const btn of this.navButtons) btn.classList.remove("is-active");
+  }
+
+  /**
+   * Top-bar level progress (V1.9-D STEP 2 §6) — reuses the exact same
+   * AirportProgression data as the "다음 목표" drawer panel (GrowthGoalInfo),
+   * just condensed to one bar + the metric closest to its threshold. No new
+   * progression calculation, no new persisted field.
+   */
+  setLevelProgress(info: GrowthGoalInfo | null): void {
+    if (!info) {
+      this.levelBarEl.style.width = "100%";
+      this.levelProgressTextEl.textContent = "MAX";
+      return;
+    }
+    const flightsFrac = info.flights.target > 0 ? info.flights.current / info.flights.target : 0;
+    const paxFrac = info.passengers.target > 0 ? info.passengers.current / info.passengers.target : 0;
+    const useFlights = flightsFrac >= paxFrac;
+    const pct = Math.round(clamp01(useFlights ? flightsFrac : paxFrac) * 100);
+    this.levelBarEl.style.width = `${pct}%`;
+    this.levelProgressTextEl.textContent = useFlights
+      ? `${info.flights.current} / ${info.flights.target}`
+      : `${info.passengers.current} / ${info.passengers.target}`;
+  }
+
+  /**
+   * Bottom "Live Activity" cards (V1.9-D STEP 2 §14-20) — up to one real
+   * object per kind, computed by Game from the same managers Selection
+   * already reads. Hidden entirely (not zero placeholder cards) when the
+   * airport has nothing of any kind yet (spec §29 — never a fake card).
+   */
+  setActivityCards(cards: ActivityCard[]): void {
+    this.activityCards = cards;
+    if (cards.length === 0) {
+      this.activityCardsEl.hidden = true;
+      return;
+    }
+    this.activityCardsEl.hidden = false;
+    this.activityCardsEl.innerHTML = cards
+      .map(
+        (c, i) =>
+          `<div class="activity-card ac-kind-${c.kind.toLowerCase()}" data-index="${i}">` +
+          `<div class="ac-card-head">` +
+          `<span class="ac-card-icon">${escapeHtml(c.icon)}</span>` +
+          `<span class="ac-card-title">${escapeHtml(c.title)}</span>` +
+          `</div>` +
+          `<div class="ac-card-subtitle">${escapeHtml(c.subtitle)}</div>` +
+          c.lines.map((l) => `<div class="ac-card-line">${escapeHtml(l)}</div>`).join("") +
+          `</div>`,
+      )
+      .join("");
   }
 
   /** Save-status badge next to the airport title (spec §E.1). */
@@ -344,7 +541,10 @@ export class HUD {
     this.gateEl.textContent = String(stats.gateCount);
     this.passengerEl.textContent = String(stats.passengerCount);
     this.flightEl.textContent = String(stats.flightCount);
-    this.staffEl.textContent = `${stats.staffActive}/${stats.staffCount}`;
+    // Same numbers, duplicated into the 직원 drawer's compact summary
+    // (V1.9-D STEP 2 §9) — no new data, just a second real place to read it.
+    this.drawerStaffCountEl.textContent = String(stats.staffCount);
+    this.drawerStaffActiveEl.textContent = String(stats.staffActive);
   }
 
   /** Brief "+12,480원" pop next to the money stat when ticket revenue lands. */
@@ -420,8 +620,11 @@ export class HUD {
   }
 
   /**
-   * Show the SELECTED panel (info) or, when nothing is selected (null), fall
-   * back to the Airport Statistics panel — the two swap in the same slot.
+   * Show the SELECTED panel, or hide it when nothing is selected (V1.9-D
+   * STEP 2: no longer swaps with Statistics — Statistics now lives in the
+   * 통계 drawer, opened independently from the left nav). Floats just above
+   * the Activity Cards row so a selection's detail sits right next to the
+   * live objects it came from.
    */
   setSelection(info: SelectionInfo | null): void {
     if (info) {
@@ -433,7 +636,7 @@ export class HUD {
       this.selectionEl.innerHTML = parts.join("");
     }
     this.selectionEl.hidden = info === null;
-    this.statisticsEl.hidden = info !== null;
+    this.helpBarEl.hidden = info !== null;
   }
 
   /** Update the Airport Statistics card values (call only when they change). */
@@ -444,6 +647,13 @@ export class HUD {
     this.statBalanceEl.textContent = formatMoney(s.balance);
     this.statAvgEl.textContent = s.avgPaxPerFlight.toFixed(1);
     this.statBoardingEl.textContent = `${s.boardingRate}%`;
+    // Top bar's 수익 pill (V1.9-D STEP 2 §6) — same lifetime revenue value,
+    // never confused with Balance (spec §22's own explicit distinction).
+    this.statRevenueTopEl.textContent = formatMoney(s.revenue);
+    // 승객 drawer's compact summary — same numbers as the Statistics grid.
+    this.drawerPaxCountEl.textContent = String(s.passengers);
+    this.drawerPaxAvgEl.textContent = s.avgPaxPerFlight.toFixed(1);
+    this.drawerPaxBoardingEl.textContent = `${s.boardingRate}%`;
   }
 
   /**
@@ -458,6 +668,9 @@ export class HUD {
     this.opGroundEl.textContent = String(o.groundEfficiency);
     this.opAvailableGatesEl.textContent = String(o.availableGates);
     this.opActiveOperationsEl.textContent = String(o.activeOperations);
+    // 시설 drawer's compact summary — same numbers as the Operations grid.
+    this.drawerGatesEl.textContent = String(o.availableGates);
+    this.drawerOpsEl.textContent = String(o.activeOperations);
   }
 
   /**
@@ -692,97 +905,187 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/**
+ * V1.9-D STEP 2 — reference-image-based layout (docs/reference/
+ * brick-airport-ui-reference.png): unified top bar, left category nav +
+ * drawer, bottom Live Activity Cards, standalone right zoom cluster, bottom
+ * help. Every existing panel's own render method (setMissions, setEvents,
+ * setStatistics, setOperations, setGroundOperations, setFlightHistory,
+ * setActiveFlights, setGrowthGoal, setActionItems) is UNCHANGED — only where
+ * their markup lives in the DOM moved, into a `.js-drawer-*` section.
+ */
 function buildTemplate(): string {
   return /* html */ `
   <div class="hud-notice js-notice" hidden></div>
 
-  <div class="hud-top">
-    <div class="hud-panel hud-title">
-      Brick Airport
-      <small class="js-airport-name">My Airport</small>
-      <b class="airport-status js-airport-status tone-good">● ${t("statusNormal")}</b>
+  <div class="topbar">
+    <div class="hud-panel topbar-identity">
+      <span class="topbar-icon">✈</span>
+      <div class="topbar-name">
+        <b class="js-airport-name">브릭 공항</b>
+        <small>BRICK AIRPORT</small>
+      </div>
+      <div class="topbar-level">
+        <span class="topbar-level-label">Lv. <b class="js-level">1</b></span>
+        <div class="topbar-progress-track"><i class="js-level-bar" style="width:0%"></i></div>
+        <small class="js-level-progress-text">0 / 0</small>
+      </div>
       <b class="save-status js-save-status" hidden></b>
     </div>
-    <div class="hud-panel hud-stats">
-      <div class="hud-stat"><span>${t("level")}</span><b class="js-level">1</b></div>
-      <div class="hud-stat hud-stat-money">
-        <span>${t("balance")}</span><b class="js-money">${escapeHtml(formatMoney(10000))}</b>
+    <div class="hud-panel topbar-stats">
+      <div class="topbar-stat stat-money">
+        <span class="ts-icon">💰</span>
+        <span class="ts-body"><small>${t("balance")}</small><b class="js-money">${escapeHtml(formatMoney(10000))}</b></span>
         <b class="hud-revenue js-revenue" aria-hidden="true"></b>
       </div>
-      <div class="hud-stat"><span>${t("aircraft")}</span><b class="js-aircraft">1</b></div>
-      <div class="hud-stat"><span>${t("gate")}</span><b class="js-gate">1</b></div>
-      <div class="hud-stat"><span>${t("passengers")}</span><b class="js-passengers">0</b></div>
-      <div class="hud-stat"><span>${t("flights")}</span><b class="js-flights">0</b></div>
-      <div class="hud-stat"><span>${t("staff")}</span><b class="js-staff">0/0</b></div>
+      <div class="topbar-stat">
+        <span class="ts-icon">📈</span>
+        <span class="ts-body"><small>수익</small><b class="js-stat-revenue-top">${escapeHtml(formatMoney(0))}</b></span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-icon">✈</span>
+        <span class="ts-body"><small>${t("flights")}</small><b class="js-flights">0</b></span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-icon">👥</span>
+        <span class="ts-body"><small>${t("passengers")}</small><b class="js-passengers">0</b></span>
+      </div>
+      <div class="topbar-stat stat-status">
+        <b class="airport-status js-airport-status tone-good">● ${t("statusNormal")}</b>
+      </div>
     </div>
   </div>
 
-  <div class="hud-mid">
-    <div class="hud-panel action-center js-action-center" hidden>
-      <div class="stat-panel-title action-center-title js-action-center-title">${t("actionCenter")}</div>
-      <div class="action-center-list js-action-center-list"></div>
-    </div>
-    <div class="hud-panel growth-goal-panel js-growth-goal" hidden>
-      <div class="stat-panel-title">다음 목표</div>
-      <div class="growth-goal-body js-growth-goal-body"></div>
-    </div>
-    <div class="hud-panel mission-panel js-missions" hidden>
-      <div class="stat-panel-title">${t("missions")}</div>
-      <div class="mission-list js-missions-list"></div>
-    </div>
-    <div class="hud-panel event-panel js-events" hidden>
-      <div class="stat-panel-title">${t("operationalEvent")}</div>
-      <div class="event-list js-events-list"></div>
-    </div>
-    <div class="hud-panel flight-history js-active-flights" hidden>
-      <div class="stat-panel-title">${t("activeFlights")}</div>
-      <div class="flight-history-list js-active-flights-list"></div>
-    </div>
-    <div class="hud-panel flight-history js-flight-history" hidden>
-      <div class="stat-panel-title">${t("recentFlights")}</div>
-      <div class="flight-history-list js-flight-history-list"></div>
-    </div>
-    <div class="hud-panel ground-ops js-ground-ops" hidden>
-      <div class="stat-panel-title">${t("groundOperations")}</div>
-      <div class="ground-ops-list js-ground-ops-list"></div>
-    </div>
+  <div class="navrail">
+    <button class="nav-item js-nav-build" data-cat="build" title="${t("build")}">
+      <span class="nav-icon">🛠</span><span class="nav-label">${t("build")}</span>
+    </button>
+    <button class="nav-item js-nav-cat" data-cat="flights"><span class="nav-icon">✈</span><span class="nav-label">항공편</span></button>
+    <button class="nav-item js-nav-cat" data-cat="passengers"><span class="nav-icon">👥</span><span class="nav-label">승객</span></button>
+    <button class="nav-item js-nav-cat" data-cat="staff"><span class="nav-icon">👤</span><span class="nav-label">직원</span></button>
+    <button class="nav-item js-nav-cat" data-cat="facility"><span class="nav-icon">🏢</span><span class="nav-label">시설</span></button>
+    <button class="nav-item js-nav-cat" data-cat="mission"><span class="nav-icon">🎯</span><span class="nav-label">임무</span></button>
+    <button class="nav-item js-nav-cat" data-cat="event"><span class="nav-icon">📅</span><span class="nav-label">이벤트</span></button>
+    <button class="nav-item js-nav-cat" data-cat="stats"><span class="nav-icon">📊</span><span class="nav-label">통계</span></button>
   </div>
 
-  <div class="hud-bottom">
-    <div class="hud-panel hud-context">
-      <div class="hud-statistics js-statistics">
-        <div class="stat-panel-title">${t("airportStatistics")}</div>
+  <div class="hud-panel action-center js-action-center" hidden>
+    <div class="stat-panel-title action-center-title js-action-center-title">${t("actionCenter")}</div>
+    <div class="action-center-list js-action-center-list" hidden></div>
+  </div>
+
+  <div class="hud-panel drawer js-drawer" hidden>
+    <div class="drawer-head">
+      <span class="drawer-title js-drawer-title">항공편</span>
+      <button class="drawer-close js-drawer-close" title="${t("cancel")}">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section js-drawer-flights" hidden>
+        <div class="drawer-mini-row">
+          <span>${t("aircraft")} <b class="js-aircraft">0</b></span>
+          <span>${t("gate")} <b class="js-gate">0</b></span>
+        </div>
+        <div class="hud-panel flight-history js-active-flights" hidden>
+          <div class="stat-panel-title">${t("activeFlights")}</div>
+          <div class="flight-history-list js-active-flights-list"></div>
+        </div>
+        <div class="hud-panel flight-history js-flight-history" hidden>
+          <div class="stat-panel-title">${t("recentFlights")}</div>
+          <div class="flight-history-list js-flight-history-list"></div>
+        </div>
+        <div class="hud-panel ground-ops js-ground-ops" hidden>
+          <div class="stat-panel-title">${t("groundOperations")}</div>
+          <div class="ground-ops-list js-ground-ops-list"></div>
+        </div>
+      </div>
+
+      <div class="drawer-section js-drawer-passengers" hidden>
         <div class="statistics-grid">
-          <div class="stat-card"><span>${t("statFlights")}</span><strong class="js-stat-flights">0</strong></div>
-          <div class="stat-card"><span>${t("statPassengers")}</span><strong class="js-stat-passengers">0</strong></div>
-          <div class="stat-card"><span>${t("statRevenue")}</span><strong class="js-stat-revenue">${escapeHtml(formatMoney(0))}</strong></div>
-          <div class="stat-card"><span>${t("statBalance")}</span><strong class="js-stat-balance">${escapeHtml(formatMoney(10000))}</strong></div>
-          <div class="stat-card"><span>${t("statAvg")}</span><strong class="js-stat-avg">0.0</strong></div>
-          <div class="stat-card"><span>${t("statBoarding")}</span><strong class="js-stat-boarding">0%</strong></div>
-        </div>
-        <div class="stat-panel-title operations-title">${t("operations")}</div>
-        <div class="operations-grid">
-          <div class="stat-card"><span>${t("opService")}</span><strong class="js-op-service">50</strong></div>
-          <div class="stat-card"><span>${t("opSatisfaction")}</span><strong class="js-op-satisfaction">70</strong></div>
-          <div class="stat-card"><span>${t("opOnTime")}</span><strong class="js-op-ontime">90%</strong></div>
-          <div class="stat-card"><span>${t("opGround")}</span><strong class="js-op-ground">70</strong></div>
-          <div class="stat-card"><span>${t("opReputation")}</span><strong class="js-op-reputation">0</strong></div>
-          <div class="stat-card"><span>${t("opAvailableGates")}</span><strong class="js-op-available-gates">0</strong></div>
-          <div class="stat-card"><span>${t("opActiveOperations")}</span><strong class="js-op-active-operations">0</strong></div>
+          <div class="stat-card"><span>${t("passengers")}</span><strong class="js-drawer-pax-count">0</strong></div>
+          <div class="stat-card"><span>${t("statAvg")}</span><strong class="js-drawer-pax-avg">0.0</strong></div>
+          <div class="stat-card"><span>${t("statBoarding")}</span><strong class="js-drawer-pax-boarding">0%</strong></div>
         </div>
       </div>
-      <div class="hud-selection js-selection" hidden>
-        <span class="sel-label">${t("selected")}</span><em class="empty">-</em>
+
+      <div class="drawer-section js-drawer-staff" hidden>
+        <div class="statistics-grid">
+          <div class="stat-card"><span>전체</span><strong class="js-drawer-staff-count">0</strong></div>
+          <div class="stat-card"><span>작업 중</span><strong class="js-drawer-staff-active">0</strong></div>
+        </div>
       </div>
-    </div>
-    <div class="hud-controls">
-      <button class="brick-btn btn-reset js-save" title="${t("save")}">${t("save")}</button>
-      <button class="brick-btn btn-reset js-load" title="${t("load")}">${t("load")}</button>
-      <button class="brick-btn btn-reset js-grid" title="${t("grid")}">${t("grid")}</button>
-      <button class="brick-btn btn-reset js-reset" title="${t("reset")}">${t("reset")}</button>
-      <button class="brick-btn js-zoom-out" title="Zoom out">&minus;</button>
-      <button class="brick-btn js-zoom-in" title="Zoom in">+</button>
+
+      <div class="drawer-section js-drawer-facility" hidden>
+        <div class="statistics-grid">
+          <div class="stat-card"><span>${t("opAvailableGates")}</span><strong class="js-drawer-gates">0</strong></div>
+          <div class="stat-card"><span>${t("opActiveOperations")}</span><strong class="js-drawer-ops">0</strong></div>
+        </div>
+      </div>
+
+      <div class="drawer-section js-drawer-mission" hidden>
+        <div class="hud-panel mission-panel js-missions" hidden>
+          <div class="mission-list js-missions-list"></div>
+        </div>
+        <div class="hud-panel growth-goal-panel js-growth-goal" hidden>
+          <div class="stat-panel-title">다음 목표</div>
+          <div class="growth-goal-body js-growth-goal-body"></div>
+        </div>
+      </div>
+
+      <div class="drawer-section js-drawer-event" hidden>
+        <div class="hud-panel event-panel js-events" hidden>
+          <div class="event-list js-events-list"></div>
+        </div>
+      </div>
+
+      <div class="drawer-section js-drawer-stats" hidden>
+        <div class="hud-statistics js-statistics">
+          <div class="stat-panel-title">${t("airportStatistics")}</div>
+          <div class="statistics-grid">
+            <div class="stat-card"><span>${t("statFlights")}</span><strong class="js-stat-flights">0</strong></div>
+            <div class="stat-card"><span>${t("statPassengers")}</span><strong class="js-stat-passengers">0</strong></div>
+            <div class="stat-card"><span>${t("statRevenue")}</span><strong class="js-stat-revenue">${escapeHtml(formatMoney(0))}</strong></div>
+            <div class="stat-card"><span>${t("statBalance")}</span><strong class="js-stat-balance">${escapeHtml(formatMoney(10000))}</strong></div>
+            <div class="stat-card"><span>${t("statAvg")}</span><strong class="js-stat-avg">0.0</strong></div>
+            <div class="stat-card"><span>${t("statBoarding")}</span><strong class="js-stat-boarding">0%</strong></div>
+          </div>
+          <div class="stat-panel-title operations-title">${t("operations")}</div>
+          <div class="operations-grid">
+            <div class="stat-card"><span>${t("opService")}</span><strong class="js-op-service">50</strong></div>
+            <div class="stat-card"><span>${t("opSatisfaction")}</span><strong class="js-op-satisfaction">70</strong></div>
+            <div class="stat-card"><span>${t("opOnTime")}</span><strong class="js-op-ontime">90%</strong></div>
+            <div class="stat-card"><span>${t("opGround")}</span><strong class="js-op-ground">70</strong></div>
+            <div class="stat-card"><span>${t("opReputation")}</span><strong class="js-op-reputation">0</strong></div>
+            <div class="stat-card"><span>${t("opAvailableGates")}</span><strong class="js-op-available-gates">0</strong></div>
+            <div class="stat-card"><span>${t("opActiveOperations")}</span><strong class="js-op-active-operations">0</strong></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
+
+  <div class="utility-cluster">
+    <button class="util-btn js-save" title="${t("save")}">💾</button>
+    <button class="util-btn js-load" title="${t("load")}">📂</button>
+    <button class="util-btn js-grid" title="${t("grid")}">▦</button>
+    <button class="util-btn js-reset" title="${t("reset")}">↺</button>
+  </div>
+
+  <div class="zoom-cluster">
+    <button class="zoom-btn js-zoom-out" title="Zoom out">−</button>
+    <span class="zoom-icon">🔍</span>
+    <button class="zoom-btn js-zoom-in" title="Zoom in">+</button>
+  </div>
+
+  <div class="info-slot">
+    <div class="hud-panel help-bar js-help-bar">
+      <span class="help-icon">💡</span>
+      <span class="help-text">클릭·터치: 선택 · 드래그: 화면 이동 · 휠·핀치: 확대·축소</span>
+    </div>
+    <div class="hud-panel selection-panel js-selection" hidden>
+      <span class="sel-label">${t("selected")}</span><em class="empty">-</em>
+    </div>
+  </div>
+
+  <div class="activity-cards js-activity-cards" hidden></div>
 `;
 }

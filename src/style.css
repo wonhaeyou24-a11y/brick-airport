@@ -9,11 +9,25 @@
   --brick-blue: #219ebc;
   --brick-sky: #8ecae6;
   --brick-green: #2a9d8f;
-  --panel-bg: #ffffff;
-  --panel-border: #22333b;
-  --panel-text: #22333b;
+  /* V1.9-D STEP 2 — reference-image palette (docs/reference/brick-airport-ui-reference.png):
+     navy/dark-blue HUD chrome + cyan/yellow accents, so the 3D world (still
+     the existing bright block-toy style, untouched) reads as the "premium
+     miniature" and the UI around it reads as a management-game HUD rather
+     than a dev overlay. --panel-* drive every existing .hud-panel-based
+     element already, so retuning these four values alone reskins the whole
+     HUD without touching each panel's own markup. */
+  --navy-900: #0b1f38;
+  --navy-800: #10294a;
+  --navy-700: #17385f;
+  --navy-line: rgba(140, 190, 240, 0.28);
+  --accent-cyan: #4fc3f7;
+  --accent-yellow: #ffc94d;
+  --accent-green: #34d399;
+  --panel-bg: rgba(11, 31, 56, 0.94);
+  --panel-border: var(--navy-line);
+  --panel-text: #eaf3fc;
   --panel-radius: 14px;
-  --panel-shadow: 0 6px 0 rgba(34, 51, 59, 0.25);
+  --panel-shadow: 0 8px 20px rgba(2, 10, 22, 0.45);
   --hud-gap: 12px;
   --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
 }
@@ -62,9 +76,10 @@ body {
   inset: 0;
   pointer-events: none; /* panels re-enable pointer events individually */
   padding: var(--hud-gap);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  /* V1.9-D STEP 2: each region (topbar/navrail/drawer/cards/zoom/...) is its
+     own absolutely-positioned child now instead of three stacked flex rows —
+     the reference layout needs regions side by side (nav + drawer + world)
+     as well as stacked (topbar over everything, cards under everything). */
   /* A drag that starts over panel text must never turn into a native text
      selection (and the copy-bubble that follows it) — it should just miss
      and, over empty HUD space, fall through to the canvas underneath. */
@@ -81,85 +96,142 @@ body {
   padding: 10px 14px;
 }
 
-.hud-top {
+/* ---------------------------------------------------------- topbar --- */
+
+.topbar {
+  position: absolute;
+  top: var(--hud-gap);
+  left: var(--hud-gap);
+  right: var(--hud-gap);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--hud-gap);
 }
 
-.hud-title {
-  font-size: 20px;
+.topbar-identity,
+.topbar-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+}
+
+.topbar-icon {
+  font-size: 22px;
+  color: var(--accent-cyan);
+}
+
+.topbar-name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  padding-right: 8px;
+  border-right: 1px solid var(--navy-line);
+}
+
+.topbar-name b {
+  font-size: 16px;
   font-weight: 800;
+}
+
+.topbar-name small {
+  font-size: 10px;
+  opacity: 0.65;
   letter-spacing: 0.5px;
 }
 
-.hud-title small {
-  display: block;
+.topbar-level {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.topbar-level-label b {
+  color: var(--accent-yellow);
+}
+
+.topbar-progress-track {
+  width: 70px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.topbar-progress-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent-cyan);
+  transition: width 0.3s ease;
+}
+
+.topbar-level-progress-text,
+.topbar-level small {
   opacity: 0.7;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .save-status {
   display: block;
-  margin-top: 2px;
+  margin-left: 6px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.5px;
-  color: var(--brick-green);
+  color: var(--accent-green);
 }
 
 .save-status.save-error {
   color: var(--brick-red);
 }
 
-.airport-status {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  font-weight: 800;
+.topbar-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-stat + .topbar-stat {
+  padding-left: 14px;
+  border-left: 1px solid var(--navy-line);
+}
+
+.ts-icon {
+  font-size: 16px;
+}
+
+.ts-body {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.ts-body small {
+  font-size: 9px;
+  opacity: 0.65;
   letter-spacing: 0.3px;
 }
 
-.airport-status.tone-good {
-  color: var(--brick-green);
-}
-
-.airport-status.tone-attention {
-  color: var(--brick-yellow);
-}
-
-.airport-status.tone-warn {
-  color: #c17a00;
-}
-
-.airport-status.tone-critical {
-  color: var(--brick-red);
-}
-
-.hud-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
+.ts-body b {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
-.hud-stat span {
-  opacity: 0.6;
-  font-weight: 600;
-  margin-right: 4px;
-}
-
-.hud-stat-money {
+.stat-money {
   position: relative;
 }
 
 .hud-revenue {
-  margin-left: 6px;
-  color: var(--brick-green);
+  position: absolute;
+  top: -14px;
+  right: 0;
+  color: var(--accent-green);
   font-weight: 800;
+  font-size: 11px;
   opacity: 0;
 }
 
@@ -169,6 +241,317 @@ body {
 
 .hud-revenue.fade {
   transition: opacity 0.4s ease;
+}
+
+.stat-status .airport-status {
+  font-size: 12px;
+}
+
+.airport-status {
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.airport-status.tone-good {
+  color: var(--accent-green);
+}
+
+.airport-status.tone-attention {
+  color: var(--accent-yellow);
+}
+
+.airport-status.tone-warn {
+  color: #ffb648;
+}
+
+.airport-status.tone-critical {
+  color: var(--brick-red);
+}
+
+/* -------------------------------------------------- left navigation --- */
+
+.navrail {
+  position: absolute;
+  top: 78px;
+  left: var(--hud-gap);
+  bottom: var(--hud-gap);
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.nav-item {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  border: 2px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: var(--panel-shadow);
+  font-family: var(--font);
+  cursor: pointer;
+  flex: none;
+}
+
+.nav-item .nav-icon {
+  font-size: 18px;
+}
+
+.nav-item .nav-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nav-item.is-active {
+  background: var(--navy-700);
+  border-color: var(--accent-yellow);
+}
+
+.nav-item.is-active .nav-label,
+.nav-item.is-active .nav-icon {
+  color: var(--accent-yellow);
+}
+
+/* ------------------------------------------------------------ drawer --- */
+
+.drawer {
+  position: absolute;
+  top: 78px;
+  left: calc(92px + var(--hud-gap) * 2);
+  width: 320px;
+  max-height: calc(100% - 78px - 190px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--navy-line);
+  flex: none;
+}
+
+.drawer-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.drawer-close {
+  pointer-events: auto;
+  background: none;
+  border: none;
+  color: var(--panel-text);
+  opacity: 0.7;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.drawer-close:hover {
+  opacity: 1;
+}
+
+.drawer-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-mini-row {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* Panels relocated inside the drawer sit flush (no extra card-in-card
+   border/shadow/max-width) since the drawer itself already provides that. */
+.drawer-section .hud-panel {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  max-width: none;
+  background: none;
+}
+
+/* ---------------------------------------------------- activity cards --- */
+
+.activity-cards {
+  position: absolute;
+  left: var(--hud-gap);
+  right: var(--hud-gap);
+  bottom: var(--hud-gap);
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  pointer-events: none;
+}
+
+.activity-card {
+  pointer-events: auto;
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 10px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.activity-card:hover {
+  border-color: var(--accent-cyan);
+}
+
+.ac-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ac-card-icon {
+  font-size: 16px;
+}
+
+.ac-card-title {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.ac-kind-aircraft .ac-card-icon { color: var(--accent-cyan); }
+.ac-kind-passenger .ac-card-icon { color: var(--accent-yellow); }
+.ac-kind-vehicle .ac-card-icon { color: var(--accent-green); }
+.ac-kind-staff .ac-card-icon { color: var(--brick-yellow); }
+
+.ac-card-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.ac-card-line {
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+/* --------------------------------------------------- zoom / utility --- */
+
+.zoom-cluster {
+  position: absolute;
+  right: var(--hud-gap);
+  bottom: 160px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
+  border-radius: 999px;
+  box-shadow: var(--panel-shadow);
+  pointer-events: auto;
+}
+
+.zoom-icon {
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.zoom-btn {
+  pointer-events: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: var(--navy-700);
+  color: var(--panel-text);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.zoom-btn:active {
+  background: var(--accent-cyan);
+  color: var(--navy-900);
+}
+
+.utility-cluster {
+  position: absolute;
+  top: 78px;
+  right: var(--hud-gap);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.util-btn {
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 2px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: var(--panel-shadow);
+}
+
+/* -------------------------------------------------------- info slot --- */
+
+.info-slot {
+  position: absolute;
+  left: calc(92px + var(--hud-gap) * 2);
+  right: 140px;
+  bottom: 160px;
+  pointer-events: none;
+}
+
+.help-bar,
+.selection-panel {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  font-size: 12px;
+}
+
+.selection-panel {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.help-icon {
+  font-size: 16px;
+}
+
+.help-text {
+  opacity: 0.85;
 }
 
 /* --------------------------------------------------------- hud notice --- */
@@ -201,30 +584,6 @@ body {
 .hud-notice.show {
   opacity: 1;
   transform: translate(-50%, 0);
-}
-
-.hud-mid {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--hud-gap);
-  /* V1.9-D: no internal scroll for now — a scrollable region here competed
-     with the canvas for the mouse wheel (scrolling this stack instead of
-     zooming). Overflow/repositioning is real layout work for the next
-     version; for now the stack simply grows past its old cap rather than
-     scroll. pointer-events stays off the container itself (each .hud-panel
-     re-enables it) so wheel/drag over the gaps between panels still reaches
-     the canvas. */
-  min-height: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.hud-bottom {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--hud-gap);
 }
 
 /* --------------------------------------------------- flight history --- */
@@ -278,13 +637,26 @@ body {
 /* --------------------------------------------------- action center --- */
 
 .action-center {
-  max-width: 340px;
+  /* V1.9-D STEP 2 §11 — a small floating indicator under the top bar,
+     collapsed by default ("⚠ 확인 필요 N"); expands in place on click. Sits
+     top-right (below the utility cluster) so it never overlaps the left
+     nav rail or the drawer that opens beside it. */
+  position: absolute;
+  top: 122px;
+  right: var(--hud-gap);
+  max-width: 260px;
   font-size: 12px;
+  z-index: 1;
 }
 
 .action-center-title {
   cursor: pointer;
   user-select: none;
+  margin-bottom: 0;
+}
+
+.action-center-list:not([hidden]) {
+  margin-top: 6px;
 }
 
 .action-center-list {
@@ -508,19 +880,6 @@ body {
   background: var(--brick-yellow);
 }
 
-.hud-context {
-  min-width: 190px;
-  max-width: 62vw;
-}
-
-.hud-selection {
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
 /* -------------------------------------------------- statistics panel --- */
 
 .stat-panel-title {
@@ -565,33 +924,27 @@ body {
   gap: 6px 12px;
 }
 
-.hud-selection .sel-label {
+.selection-panel .sel-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   opacity: 0.5;
-  margin-bottom: 2px;
 }
 
-.hud-selection .sel-title {
+.selection-panel .sel-title {
   font-size: 15px;
   font-weight: 800;
 }
 
-.hud-selection .sel-line {
+.selection-panel .sel-line {
   font-size: 12px;
   font-weight: 600;
   opacity: 0.75;
 }
 
-.hud-selection .empty {
+.selection-panel .empty {
   font-weight: 600;
   opacity: 0.6;
-}
-
-.hud-controls {
-  display: flex;
-  gap: 8px;
 }
 
 .brick-btn {
@@ -625,15 +978,18 @@ body {
 
 /* --------------------------------------------------------- build menu --- */
 
+/* V1.9-D STEP 2 §9-10 — the old floating mid-screen toggle is retired; the
+   left-nav "건설" item now opens this panel in the same drawer screen slot,
+   so only one nav-triggered panel is ever visible over the 3D world. */
 .build-menu {
   position: absolute;
-  right: var(--hud-gap);
-  top: 50%;
-  transform: translateY(-50%);
+  top: 78px;
+  left: calc(92px + var(--hud-gap) * 2);
+  width: 320px;
+  max-height: calc(100% - 78px - 190px);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: stretch;
   pointer-events: none;
 }
 
@@ -641,16 +997,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
-  pointer-events: none;
-  max-height: 80vh;
+  align-items: stretch;
+  pointer-events: auto;
   overflow-y: auto;
-  /* keep the scrollbar from clipping the button shadows */
-  padding: 2px 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  border-radius: 14px;
+  padding: 10px;
 }
 
 .build-toggle {
-  font-size: 14px;
+  display: none;
 }
 
 .build-toggle.is-open {
@@ -760,57 +1118,99 @@ body {
     --hud-gap: 8px;
   }
 
-  .hud-title {
-    font-size: 16px;
+  /* --------------------------------------- V1.9-D STEP 2 mobile layout --- */
+
+  .topbar-identity,
+  .topbar-stats {
+    padding: 6px 10px;
+    gap: 8px;
   }
 
-  .hud-title small {
-    font-size: 10px;
+  .topbar-name b {
+    font-size: 13px;
   }
 
-  .hud-stats {
+  .topbar-progress-track {
+    width: 40px;
+  }
+
+  .topbar-stat + .topbar-stat {
+    padding-left: 8px;
+  }
+
+  .ts-body b {
     font-size: 12px;
-    gap: 4px 10px;
-    max-width: 45vw;
   }
 
-  .hud-bottom {
-    flex-direction: column-reverse;
-    align-items: stretch;
+  .ts-body small {
+    display: none; /* value alone is enough at this width — label was the hint */
   }
 
-  .hud-controls {
-    justify-content: flex-end;
+  .navrail {
+    top: 64px;
+    width: 56px;
   }
 
-  .brick-btn {
-    min-width: 48px;
-    min-height: 48px;
+  .nav-item {
+    padding: 8px 2px;
   }
 
-  /* Korean labels (저장/불러오기/격자/초기화) are wider than the English ones
-     this row was sized for — shrink the label instead of the tap target. */
-  .brick-btn.btn-reset {
-    font-size: 11px;
-    padding: 4px 6px;
-    white-space: nowrap;
+  .nav-item .nav-label {
+    font-size: 8px;
+  }
+
+  .drawer {
+    top: 64px;
+    left: calc(56px + var(--hud-gap) * 2);
+    right: var(--hud-gap);
+    width: auto;
+    max-height: calc(100% - 64px - 150px);
+  }
+
+  .info-slot {
+    left: calc(56px + var(--hud-gap) * 2);
+    right: var(--hud-gap);
+    bottom: 128px;
+  }
+
+  .help-text {
+    display: none; /* icon-only on mobile — the sentence doesn't fit and isn't essential */
+  }
+
+  .utility-cluster {
+    top: 64px;
+  }
+
+  .action-center {
+    top: 104px;
+    max-width: 52vw;
+  }
+
+  .zoom-cluster {
+    bottom: 128px;
+  }
+
+  .activity-cards {
+    gap: 8px;
+  }
+
+  .activity-card {
+    flex: 0 0 62vw;
+    min-width: 0;
   }
 
   .build-menu {
-    top: auto;
-    /* clear the bottom HUD stack — taller since the Operations block (V0.7) */
-    bottom: 304px;
-    transform: none;
+    top: 64px;
+    left: calc(56px + var(--hud-gap) * 2);
+    right: var(--hud-gap);
+    width: auto;
+    max-height: calc(100% - 64px - 150px);
   }
 
   .build-type,
   .build-cancel {
     min-width: 132px;
     min-height: 48px;
-  }
-
-  .hud-context {
-    max-width: none;
   }
 
   .statistics-grid {
@@ -921,10 +1321,4 @@ body {
     display: none;
   }
 
-  /* V1.9-D: same no-scroll fix as desktop — see .hud-mid above. */
-  .hud-mid {
-    max-height: none;
-    overflow: visible;
-    pointer-events: none;
-  }
 }

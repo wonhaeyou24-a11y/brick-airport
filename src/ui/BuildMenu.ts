@@ -104,6 +104,17 @@ export class BuildMenu {
     this.setOpen(true);
   }
 
+  /** V1.9-D STEP 2 §9 — the left-nav "건설" button now drives this panel
+   * directly (its own old toggle button is visually hidden), so it needs
+   * open/close-on-second-click like every other nav category. */
+  toggleMenu(): void {
+    this.setOpen(!this.open);
+  }
+
+  closeMenu(): void {
+    this.setOpen(false);
+  }
+
   /** Update the airport-expansion card (spec §E.5/§E.6). */
   setExpansion(info: ExpansionInfo): void {
     if (!info.available) {

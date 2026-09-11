@@ -79,7 +79,15 @@ import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
 import type { StaffRole } from "./GameState";
-import { HUD, type SelectionInfo, type ActiveFlightEntry, type ActionItem } from "../ui/HUD";
+import {
+  HUD,
+  type SelectionInfo,
+  type ActiveFlightEntry,
+  type ActionItem,
+  type ActivityCard,
+  type ActivityKind,
+} from "../ui/HUD";
+import { vehicleLabel } from "../vehicles/GroundVehicle";
 import { Gate } from "../buildings/Gate";
 import { AudioManager } from "../audio/AudioManager";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
@@ -184,6 +192,8 @@ export class Game {
   private shownGateVisualsSig = "";
   /** Signature of the "확인 필요" Action Center (V1.8 §8). */
   private shownActionCenterSig = "";
+  /** Signature of the bottom "Live Activity" cards (V1.9-D STEP 2 §14-20). */
+  private shownActivityCardsSig = "";
   /** One-shot expansion-complete ring pulse (V1.9 §15) — null when idle. */
   private expansionPulse: {
     mesh: THREE.Mesh;
@@ -346,6 +356,16 @@ export class Game {
         onSave: () => this.save(),
         onLoad: () => this.requestLoad(),
         onActionClick: (item) => this.onActionClick(item),
+        // V1.9-D STEP 2 §9 — the left nav's 건설 button just opens the
+        // existing BuildMenu; buildMenu isn't constructed yet at this exact
+        // line, but this closure only reads it once actually clicked, well
+        // after the constructor below finishes.
+        onOpenBuild: () => {
+          this.hud.closeDrawer();
+          this.buildMenu.toggleMenu();
+        },
+        onActivityCardClick: (kind, targetId) => this.onActivityCardClick(kind, targetId),
+        onDrawerOpen: () => this.buildMenu.closeMenu(),
       },
       this.audio,
     );
@@ -1247,6 +1267,7 @@ export class Game {
     this.refreshGroundOps();
     this.refreshGateVisuals();
     this.refreshActionCenter();
+    this.refreshActivityCards();
     this.refreshGrowthGoal();
     this.refreshMissions();
     this.refreshEvents();
@@ -1613,6 +1634,7 @@ export class Game {
       if (this.shownGrowthGoalSig === "max") return;
       this.shownGrowthGoalSig = "max";
       this.hud.setGrowthGoal(null);
+      this.hud.setLevelProgress(null); // V1.9-D STEP 2 §6 — same source, top bar too
       return;
     }
     const flights = a.totalFlights ?? 0;
@@ -1620,11 +1642,13 @@ export class Game {
     const sig = `${nextReq.level}|${flights}|${passengers}`;
     if (sig === this.shownGrowthGoalSig) return;
     this.shownGrowthGoalSig = sig;
-    this.hud.setGrowthGoal({
+    const info = {
       nextLevel: nextReq.level,
       flights: { current: Math.min(flights, nextReq.minFlights), target: nextReq.minFlights },
       passengers: { current: Math.min(passengers, nextReq.minPassengers), target: nextReq.minPassengers },
-    });
+    };
+    this.hud.setGrowthGoal(info);
+    this.hud.setLevelProgress(info);
   }
 
   /**
@@ -1761,6 +1785,91 @@ export class Game {
     if (item.kind === "BUILD_GATE" || item.kind === "STAFF" || item.kind === "EXPAND") {
       this.buildMenu.openMenu();
     }
+  }
+
+  /**
+   * Bottom "Live Activity" cards (V1.9-D STEP 2 §14-21) — at most one REAL
+   * object per kind, picked from the exact same managers Selection already
+   * reads (never a second data source, never a fabricated object — spec
+   * §29). Hidden entirely once nothing of any kind exists yet.
+   */
+  private refreshActivityCards(): void {
+    const cards: ActivityCard[] = [];
+    const s = this.state;
+
+    const ac = s.data.aircraft[0];
+    if (ac) {
+      const flight = s.getFlightByAircraft(ac.id);
+      cards.push({
+        kind: "AIRCRAFT",
+        targetId: ac.id,
+        icon: "✈",
+        title: flight?.id ?? ac.type,
+        subtitle: stateLabel(ac.state),
+        lines: [ac.homeGateId ? `${t("gate")} ${gateName(ac.homeGateId)}` : "—"],
+      });
+    }
+
+    const pax = s.data.passengers[0];
+    if (pax) {
+      cards.push({
+        kind: "PASSENGER",
+        targetId: pax.id,
+        icon: "👥",
+        title: pax.id,
+        subtitle: stateLabel(pax.state),
+        lines: [pax.gateId ? `${t("gate")} ${gateName(pax.gateId)}` : "—"],
+      });
+    }
+
+    // Prefer a vehicle actually doing something over an idle one, so the
+    // card is more likely to show real turnaround activity at a glance.
+    const veh =
+      s.data.groundVehicles.find((v) => v.state !== "IDLE") ?? s.data.groundVehicles[0];
+    if (veh) {
+      const op = veh.operationId ? s.getGroundOperation(veh.operationId) : undefined;
+      cards.push({
+        kind: "VEHICLE",
+        targetId: veh.id,
+        icon: "🚚",
+        title: vehicleLabel(veh.type),
+        subtitle: stateLabel(veh.state),
+        lines: [op ? opLabel(op.type) : "—"],
+      });
+    }
+
+    const staff =
+      s.data.staff.find((x) => x.state !== "IDLE") ?? s.data.staff[0];
+    if (staff) {
+      const op = staff.operationId ? s.getGroundOperation(staff.operationId) : undefined;
+      cards.push({
+        kind: "STAFF",
+        targetId: staff.id,
+        icon: "👷",
+        title: staffRoleLabel(staff.role),
+        subtitle: stateLabel(staff.state),
+        lines: [op ? opLabel(op.type) : "—"],
+      });
+    }
+
+    const sig = cards.map((c) => `${c.kind}:${c.targetId}:${c.subtitle}:${c.lines.join(",")}`).join("|");
+    if (sig === this.shownActivityCardsSig) return;
+    this.shownActivityCardsSig = sig;
+    this.hud.setActivityCards(cards);
+  }
+
+  /** An Activity Card was clicked (V1.9-D STEP 2 §19) — reuse the existing
+   * SelectionManager exactly as a direct click on the 3D object would. */
+  private onActivityCardClick(kind: ActivityKind, targetId: string): void {
+    const target =
+      kind === "AIRCRAFT"
+        ? this.aircraftManager.getById(targetId)
+        : kind === "PASSENGER"
+          ? this.passengerManager.getById(targetId)
+          : kind === "VEHICLE"
+            ? this.vehicleManager.getById(targetId)
+            : this.staffManager.getById(targetId);
+    if (target) this.selection.select(target);
   }
 
   /** Push cost / lock state to the BuildMenu when level or money changes. */
