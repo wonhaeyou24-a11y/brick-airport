@@ -191,7 +191,13 @@ export type NavCategory =
  * managers Selection already reads; clicking a card reuses the existing
  * SelectionManager/CameraController, never a new selection path (§19).
  */
-export type ActivityKind = "AIRCRAFT" | "PASSENGER" | "VEHICLE" | "STAFF";
+export type ActivityKind =
+  | "AIRCRAFT"
+  | "PASSENGER"
+  | "VEHICLE"
+  | "STAFF"
+  | "GATE"
+  | "GROUND_OP";
 export interface ActivityCard {
   kind: ActivityKind;
   targetId: string;
@@ -199,6 +205,9 @@ export interface ActivityCard {
   title: string;
   subtitle: string;
   lines: string[];
+  /** 0-1, shown as a progress bar (V2.0 Phase G — ground-op turnaround %).
+   * Omitted entirely for kinds that have no meaningful progress. */
+  progress?: number;
 }
 
 export interface HudCallbacks {
@@ -231,6 +240,7 @@ export class HUD {
   private readonly revenueEl: HTMLElement;
   private readonly airportNameEl: HTMLElement;
   private readonly selectionEl: HTMLElement;
+  private readonly clockEl: HTMLElement;
   private readonly statFlightsEl: HTMLElement;
   private readonly statPassengersEl: HTMLElement;
   private readonly statRevenueEl: HTMLElement;
@@ -328,6 +338,7 @@ export class HUD {
     this.flightEl = this.must(".js-flights");
     this.revenueEl = this.must(".js-revenue");
     this.selectionEl = this.must(".js-selection");
+    this.clockEl = this.must(".js-clock");
     this.must(".js-statistics"); // validated to exist; content lives in the 통계 drawer section
     this.statFlightsEl = this.must(".js-stat-flights");
     this.statPassengersEl = this.must(".js-stat-passengers");
@@ -434,6 +445,19 @@ export class HUD {
         this.audio.playClick();
       }
     });
+
+    // Top-bar clock (V2.0 Phase G) — the real device time, purely cosmetic
+    // chrome like the reference's "10:24 맑음" badge; no weather system
+    // exists so the sun icon is fixed rather than fabricating live data.
+    this.updateClock();
+    setInterval(() => this.updateClock(), 30_000);
+  }
+
+  private updateClock(): void {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    this.clockEl.textContent = `${hh}:${mm}`;
   }
 
   // --------------------------------------------- V1.9-D STEP 2: nav + drawer
@@ -516,6 +540,11 @@ export class HUD {
           `</div>` +
           `<div class="ac-card-subtitle">${escapeHtml(c.subtitle)}</div>` +
           c.lines.map((l) => `<div class="ac-card-line">${escapeHtml(l)}</div>`).join("") +
+          (c.progress != null
+            ? `<div class="ac-progress"><i style="width:${Math.round(
+                clamp01(c.progress) * 100,
+              )}%"></i></div>`
+            : "") +
           `<div class="ac-card-footer"><span class="ac-card-select">🖐 선택</span></div>` +
           `</div>` +
           `</div>`,
@@ -956,6 +985,10 @@ function buildTemplate(): string {
       </div>
       <div class="topbar-stat stat-status">
         <b class="airport-status js-airport-status tone-good">● ${t("statusNormal")}</b>
+      </div>
+      <div class="topbar-stat stat-clock">
+        <span class="ts-icon">🕐</span>
+        <span class="ts-body"><b class="js-clock">--:--</b><small>☀ 맑음</small></span>
       </div>
     </div>
   </div>

@@ -87,7 +87,6 @@ import {
   type ActivityCard,
   type ActivityKind,
 } from "../ui/HUD";
-import { vehicleLabel } from "../vehicles/GroundVehicle";
 import { Gate } from "../buildings/Gate";
 import { AudioManager } from "../audio/AudioManager";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
@@ -1810,6 +1809,56 @@ export class Game {
       });
     }
 
+    // Gate — prefer one actually in use over an idle AVAILABLE one, so the
+    // card is more likely to show a real turnaround at a glance. targetId is
+    // the *building* id (what Selection actually needs), never the GateData
+    // id, since clicking the card must resolve to the same Building instance
+    // a direct 3D click on the gate would (spec §10's reused-Selection rule).
+    const gate =
+      s.data.gates.find((gt) => gt.status !== "AVAILABLE") ?? s.data.gates[0];
+    if (gate) {
+      cards.push({
+        kind: "GATE",
+        targetId: gate.buildingId,
+        icon: "🛬",
+        title: gateName(gate.id),
+        subtitle: stateLabel(gate.status),
+        lines: [gate.aircraftId ? stateLabel("OCCUPIED") : stateLabel("AVAILABLE")],
+      });
+    }
+
+    // Ground operation — the clearest "work in progress" signal, with a real
+    // elapsed/duration progress bar (never a fake animated one).
+    const op =
+      s.data.groundOperations.find((o) => o.state === "IN_PROGRESS") ??
+      s.data.groundOperations.find((o) => o.state === "ASSIGNED") ??
+      s.data.groundOperations.find((o) => o.state === "PENDING");
+    if (op) {
+      cards.push({
+        kind: "GROUND_OP",
+        targetId: op.aircraftId,
+        icon: "🧰",
+        title: opLabel(op.type),
+        subtitle: stateLabel(op.state),
+        lines: [`${t("gate")} ${gateName(op.gateId)}`],
+        progress: op.duration > 0 ? (op.elapsed ?? 0) / op.duration : undefined,
+      });
+    }
+
+    const staff =
+      s.data.staff.find((x) => x.state !== "IDLE") ?? s.data.staff[0];
+    if (staff) {
+      const staffOp = staff.operationId ? s.getGroundOperation(staff.operationId) : undefined;
+      cards.push({
+        kind: "STAFF",
+        targetId: staff.id,
+        icon: "👷",
+        title: staffRoleLabel(staff.role),
+        subtitle: stateLabel(staff.state),
+        lines: [staffOp ? opLabel(staffOp.type) : "—"],
+      });
+    }
+
     const pax = s.data.passengers[0];
     if (pax) {
       cards.push({
@@ -1822,37 +1871,17 @@ export class Game {
       });
     }
 
-    // Prefer a vehicle actually doing something over an idle one, so the
-    // card is more likely to show real turnaround activity at a glance.
-    const veh =
-      s.data.groundVehicles.find((v) => v.state !== "IDLE") ?? s.data.groundVehicles[0];
-    if (veh) {
-      const op = veh.operationId ? s.getGroundOperation(veh.operationId) : undefined;
-      cards.push({
-        kind: "VEHICLE",
-        targetId: veh.id,
-        icon: "🚚",
-        title: vehicleLabel(veh.type),
-        subtitle: stateLabel(veh.state),
-        lines: [op ? opLabel(op.type) : "—"],
-      });
-    }
-
-    const staff =
-      s.data.staff.find((x) => x.state !== "IDLE") ?? s.data.staff[0];
-    if (staff) {
-      const op = staff.operationId ? s.getGroundOperation(staff.operationId) : undefined;
-      cards.push({
-        kind: "STAFF",
-        targetId: staff.id,
-        icon: "👷",
-        title: staffRoleLabel(staff.role),
-        subtitle: stateLabel(staff.state),
-        lines: [op ? opLabel(op.type) : "—"],
-      });
-    }
-
-    const sig = cards.map((c) => `${c.kind}:${c.targetId}:${c.subtitle}:${c.lines.join(",")}`).join("|");
+    // Progress is quantized to 5%-buckets in the signature (not the raw
+    // float) so a slowly-advancing ground-op still visibly updates the
+    // card's bar without re-rendering the DOM every single frame.
+    const sig = cards
+      .map(
+        (c) =>
+          `${c.kind}:${c.targetId}:${c.subtitle}:${c.lines.join(",")}:${
+            c.progress != null ? Math.round(c.progress * 20) : ""
+          }`,
+      )
+      .join("|");
     if (sig === this.shownActivityCardsSig) return;
     this.shownActivityCardsSig = sig;
     this.hud.setActivityCards(cards);
@@ -1862,13 +1891,15 @@ export class Game {
    * SelectionManager exactly as a direct click on the 3D object would. */
   private onActivityCardClick(kind: ActivityKind, targetId: string): void {
     const target =
-      kind === "AIRCRAFT"
+      kind === "AIRCRAFT" || kind === "GROUND_OP"
         ? this.aircraftManager.getById(targetId)
         : kind === "PASSENGER"
           ? this.passengerManager.getById(targetId)
           : kind === "VEHICLE"
             ? this.vehicleManager.getById(targetId)
-            : this.staffManager.getById(targetId);
+            : kind === "GATE"
+              ? this.world.getBuildingObject(targetId)
+              : this.staffManager.getById(targetId);
     if (target) this.selection.select(target);
   }
 

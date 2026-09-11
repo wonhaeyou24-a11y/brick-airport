@@ -19,15 +19,20 @@
   --navy-900: #0b1f38;
   --navy-800: #10294a;
   --navy-700: #17385f;
-  --navy-line: rgba(140, 190, 240, 0.28);
-  --accent-cyan: #4fc3f7;
-  --accent-yellow: #ffc94d;
-  --accent-green: #34d399;
-  --panel-bg: rgba(11, 31, 56, 0.94);
+  --navy-line: rgba(0, 195, 255, 0.45);
+  /* V2.0 Phase G — "네온 블루 글래스모피즘": a translucent, blurred dark-navy
+     glass panel with a glowing cyan hairline border, replacing the previous
+     opaque navy chrome. --panel-* drives every existing .hud-panel-based
+     element already, so retuning these values alone reskins the whole HUD. */
+  --accent-cyan: #00e5ff;
+  --accent-yellow: #ffc800;
+  --accent-green: #00e676;
+  --panel-bg: rgba(6, 26, 55, 0.78);
+  --panel-blur: 14px;
   --panel-border: var(--navy-line);
   --panel-text: #eaf3fc;
   --panel-radius: 14px;
-  --panel-shadow: 0 8px 20px rgba(2, 10, 22, 0.45);
+  --panel-shadow: 0 0 12px rgba(0, 195, 255, 0.15);
   --hud-gap: 12px;
   --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
 }
@@ -90,7 +95,9 @@ body {
 .hud-panel {
   pointer-events: auto;
   background: var(--panel-bg);
-  border: 3px solid var(--panel-border);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
   padding: 10px 14px;
@@ -285,6 +292,8 @@ body {
   overflow-x: hidden;
   pointer-events: auto;
   background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
   border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
@@ -437,6 +446,8 @@ body {
   min-width: 200px;
   max-width: 270px;
   background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
   border: 1.5px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
@@ -496,6 +507,21 @@ body {
     linear-gradient(160deg, #c46a35, #5c2a14);
 }
 
+/* Gate — a lit apron-pad glow (green-blue, echoing gate-available/boarding
+   status lights). Ground op — a warm amber "work in progress" glow. */
+.ac-kind-gate .ac-card-image {
+  background:
+    radial-gradient(50px 30px at 50% 100%, rgba(0,230,118,0.35), transparent 75%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 8px, transparent 8px 18px),
+    linear-gradient(160deg, #2a6b6e, #123338);
+}
+
+.ac-kind-ground_op .ac-card-image {
+  background:
+    radial-gradient(50px 50px at 50% 45%, rgba(255,200,0,0.4), transparent 72%),
+    linear-gradient(160deg, #8a6a1f, #3f2f0c);
+}
+
 .ac-card-image span {
   filter: drop-shadow(0 3px 3px rgba(0,0,0,0.35));
 }
@@ -526,6 +552,25 @@ body {
 .ac-kind-passenger .ac-card-icon { color: var(--accent-yellow); }
 .ac-kind-vehicle .ac-card-icon { color: var(--accent-green); }
 .ac-kind-staff .ac-card-icon { color: var(--brick-yellow); }
+.ac-kind-gate .ac-card-icon { color: var(--accent-green); }
+.ac-kind-ground_op .ac-card-icon { color: var(--accent-yellow); }
+
+/* Ground-op turnaround progress bar (V2.0 Phase G) — a real elapsed/duration
+   ratio from GroundOperationData, never a fake animated fill. */
+.ac-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.ac-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent-yellow);
+  transition: width 0.3s ease;
+}
 
 .ac-card-subtitle {
   font-size: 11px;
@@ -569,7 +614,9 @@ body {
   gap: 6px;
   padding: 6px 10px;
   background: var(--panel-bg);
-  border: 2px solid var(--panel-border);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
   border-radius: 999px;
   box-shadow: var(--panel-shadow);
   pointer-events: auto;
@@ -612,8 +659,10 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  border: 2px solid var(--panel-border);
+  border: 1px solid var(--panel-border);
   background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
   color: var(--panel-text);
   font-size: 14px;
   cursor: pointer;
@@ -1174,8 +1223,10 @@ body {
 .expansion-card {
   pointer-events: auto;
   background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
   color: var(--panel-text);
-  border: 3px solid var(--panel-border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
   padding: 8px 12px;
