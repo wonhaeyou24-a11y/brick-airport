@@ -11,6 +11,7 @@ import type {
   FlightData,
   FlightState,
   GameStateData,
+  GateData,
   OperationalEventType,
 } from "./GameState";
 import { GameLoop } from "./GameLoop";
@@ -488,10 +489,20 @@ export class Game {
     this.state.data.buildings.push(data);
     this.occupancy.add(data);
     this.world.addBuilding(data);
-    if (data.type === "GATE") this.state.addGateForBuilding(data);
+    let gate: GateData | null = null;
+    if (data.type === "GATE") gate = this.state.addGateForBuilding(data);
     if (isServiceFacility(data.type)) this.operations.recomputeServiceScore();
     this.refreshHudStats();
-    if (charge) this.requestEventSave(); // a free console placeBuilding() doesn't count
+    if (charge) {
+      // Build confirmation (spec §13) — a short "X 건설 완료" alongside the
+      // existing showSpend() money pop, so the player sees WHAT was bought,
+      // not just that money moved.
+      const name = gate
+        ? `${t("gate")} ${gateName(gate.id)}`
+        : buildingLabel(data.type);
+      this.hud.showNotice(`${name} 건설 완료`, 1800);
+      this.requestEventSave(); // a free console placeBuilding() doesn't count
+    }
     return true;
   }
 
@@ -1477,11 +1488,12 @@ function gateName(gateId: string): string {
   return match ? `G-${String(parseInt(match[1], 10)).padStart(2, "0")}` : gateId;
 }
 
+/** Player-facing reason text (spec §12's own suggested phrasing). */
 function validityText(v: PlacementValidity): string {
-  if (v.valid) return "유효";
-  if (v.reason === "OUT_OF_BOUNDS") return "불가 (범위 밖)";
-  if (v.reason === "OUTSIDE_EXPANSION") return "불가 (공항 확장 필요)";
-  return "불가 (이미 점유됨)";
+  if (v.valid) return "배치 가능";
+  if (v.reason === "OUT_OF_BOUNDS") return "공항 영역을 벗어났습니다";
+  if (v.reason === "OUTSIDE_EXPANSION") return "공항을 먼저 확장해야 합니다";
+  return "다른 시설과 겹칩니다";
 }
 
 /** Combined placement + purchase status for the BUILD MODE HUD line. */
@@ -1493,5 +1505,5 @@ function buildStatusText(state: BuildModeState): string {
   }
   if (!state.cell) return "격자 위로 이동하세요";
   if (state.validity && !state.validity.valid) return validityText(state.validity);
-  return "유효";
+  return "배치 가능";
 }
