@@ -484,12 +484,13 @@ export function defaultGroundVehicles(): GroundVehicleData[] {
  * operations layer decides what they do.
  */
 export function defaultStaff(): StaffData[] {
+  // Small fixed skill spread so the starting crew aren't identical (spec §D.3).
   const roles: { role: StaffRole; name: string; skill: number; salary: number }[] =
     [
-      { role: "BAGGAGE_AGENT", name: "Kim", skill: 70, salary: 75 },
-      { role: "CLEANING_AGENT", name: "Lee", skill: 70, salary: 70 },
-      { role: "FUEL_OPERATOR", name: "Park", skill: 75, salary: 100 },
-      { role: "GROUND_AGENT", name: "Choi", skill: 70, salary: 80 },
+      { role: "BAGGAGE_AGENT", name: "Kim", skill: 68, salary: 75 },
+      { role: "CLEANING_AGENT", name: "Lee", skill: 73, salary: 70 },
+      { role: "FUEL_OPERATOR", name: "Park", skill: 76, salary: 100 },
+      { role: "GROUND_AGENT", name: "Choi", skill: 66, salary: 80 },
     ];
   const now = Date.now();
   return roles.map(({ role, name, skill, salary }, i) => {
