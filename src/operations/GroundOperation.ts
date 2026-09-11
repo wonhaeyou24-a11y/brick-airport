@@ -51,6 +51,7 @@ export function createGroundOperation(
     duration: getGroundOperationDuration(type),
     elapsed: 0,
     vehicleId: null,
+    staffId: null,
   };
 }
 

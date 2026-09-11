@@ -151,6 +151,8 @@ export interface GroundOperationData {
   elapsed?: number;
   /** Ground vehicle assigned to the task, if any (V0.8-B). */
   vehicleId?: string | null;
+  /** Staff member assigned to the task, if any (V0.9-C). */
+  staffId?: string | null;
   /** True if the task waited PENDING longer than the delay threshold (V0.8-D). */
   delayed?: boolean;
 }
@@ -195,6 +197,47 @@ export interface GroundVehicleData {
 }
 
 /**
+ * Airport staff (V0.9-A). A staff member performs one Ground Operation type,
+ * mapped by role. Its state machine is its OWN concept — never merged with
+ * GroundOperationState or GroundVehicleState (spec §9, §75):
+ *
+ *   IDLE -> MOVING -> WORKING -> IDLE     (BREAK / UNAVAILABLE reserved)
+ *
+ * As with every other entity, NO Three.js object is stored here.
+ */
+export type StaffRole =
+  | "GROUND_AGENT"
+  | "CLEANING_AGENT"
+  | "FUEL_OPERATOR"
+  | "BAGGAGE_AGENT";
+
+export type StaffState = "IDLE" | "MOVING" | "WORKING" | "BREAK" | "UNAVAILABLE";
+
+export interface StaffData {
+  /** Staff id like "staff-001". */
+  id: string;
+  name: string;
+  role: StaffRole;
+  state: StaffState;
+  /** Current world position (y is always 0). */
+  position: Vec3;
+  /** Where they are walking toward, or null when at the staff room / working. */
+  targetPosition: Vec3 | null;
+  /** The ground operation they are currently working, if any. */
+  operationId?: string | null;
+  /** 0–100. Higher = slightly faster tasks (spec §D.3). */
+  skill: number;
+  /** Epoch ms the staff member was hired. */
+  hiredAt: number;
+  /** Wage — data only in V0.9, for a future operating-cost system (spec §B.4). */
+  salary: number;
+  /** Staff-room slot they return to when idle. */
+  homePosition: Vec3;
+  /** Units per second. */
+  speed: number;
+}
+
+/**
  * Live airport operating metrics (V0.7-A). Separate from the lifetime
  * accumulators (`totalRevenue` etc.) and from `reputation` — these describe the
  * airport's CURRENT service level, not its history:
@@ -226,7 +269,7 @@ export const DEFAULT_OPERATIONS: OperationsData = {
 };
 
 /** Current on-disk state schema version. Older states migrate up in the ctor. */
-export const STATE_VERSION = "0.8.0";
+export const STATE_VERSION = "0.9.0";
 
 export interface AirportData {
   id: string;
@@ -377,9 +420,17 @@ export interface GameStateData {
   groundOperations: GroundOperationData[];
   /** The ground service vehicle fleet (V0.8-B). */
   groundVehicles: GroundVehicleData[];
+  /** The airport staff (V0.9-A). */
+  staff: StaffData[];
   /** Currently selected entity, for HUD display. */
   selection: {
-    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | "GROUND_VEHICLE" | null;
+    kind:
+      | "AIRCRAFT"
+      | "BUILDING"
+      | "PASSENGER"
+      | "GROUND_VEHICLE"
+      | "GROUND_STAFF"
+      | null;
     id: string | null;
   };
   /** Grid interaction state (hover / picked cell). */
@@ -423,6 +474,43 @@ export function defaultGroundVehicles(): GroundVehicleData[] {
       capacity: 1,
       homePosition: { ...home },
       speed: 12,
+    };
+  });
+}
+
+/**
+ * The starting staff — one per role (spec §B.2), free, standing in a small
+ * staff room east of the gates. Base skill / salary mirror StaffConfig; the
+ * operations layer decides what they do.
+ */
+export function defaultStaff(): StaffData[] {
+  const roles: { role: StaffRole; name: string; skill: number; salary: number }[] =
+    [
+      { role: "BAGGAGE_AGENT", name: "Kim", skill: 70, salary: 75 },
+      { role: "CLEANING_AGENT", name: "Lee", skill: 70, salary: 70 },
+      { role: "FUEL_OPERATOR", name: "Park", skill: 75, salary: 100 },
+      { role: "GROUND_AGENT", name: "Choi", skill: 70, salary: 80 },
+    ];
+  const now = Date.now();
+  return roles.map(({ role, name, skill, salary }, i) => {
+    const home: Vec3 = {
+      x: 12 + (i % 2) * 1.6,
+      y: 0,
+      z: 8 + Math.floor(i / 2) * 1.6,
+    };
+    return {
+      id: `staff-${String(i + 1).padStart(3, "0")}`,
+      name,
+      role,
+      state: "IDLE" as StaffState,
+      position: { ...home },
+      targetPosition: null,
+      operationId: null,
+      skill,
+      hiredAt: now,
+      salary,
+      homePosition: { ...home },
+      speed: 4.5,
     };
   });
 }
@@ -545,6 +633,7 @@ export function createInitialState(): GameStateData {
     flights: [],
     groundOperations: [],
     groundVehicles: defaultGroundVehicles(),
+    staff: defaultStaff(),
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -592,6 +681,10 @@ export class GameState {
     if (!this.data.groundOperations) this.data.groundOperations = [];
     if (!this.data.groundVehicles || this.data.groundVehicles.length === 0) {
       this.data.groundVehicles = defaultGroundVehicles();
+    }
+    // Forward-compat: a state saved before V0.9 has no staff.
+    if (!this.data.staff || this.data.staff.length === 0) {
+      this.data.staff = defaultStaff();
     }
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
@@ -905,13 +998,14 @@ export class GameState {
     if (op) Object.assign(op, patch);
   }
 
-  /** Mark a ground operation COMPLETED (idempotent). Frees its vehicle link. */
+  /** Mark a ground operation COMPLETED (idempotent). Frees its vehicle + staff links. */
   completeGroundOperation(id: string): void {
     const op = this.getGroundOperation(id);
     if (!op || isGroundOperationOver(op.state)) return;
     op.state = "COMPLETED";
     op.completedAt = Date.now();
     op.vehicleId = null;
+    op.staffId = null;
   }
 
   /**
@@ -949,8 +1043,57 @@ export class GameState {
     this.data.groundVehicles.push(vehicle);
   }
 
+  // ---------------------------------------------------------------- staff
+
+  /** A fresh, collision-free staff id like "staff-001". */
+  nextStaffId(): string {
+    let max = 0;
+    for (const s of this.data.staff) {
+      const m = /(\d+)$/.exec(s.id);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `staff-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  addStaff(staff: StaffData): void {
+    this.data.staff.push(staff);
+  }
+
+  getStaff(id: string | null | undefined): StaffData | undefined {
+    if (!id) return undefined;
+    return this.data.staff.find((s) => s.id === id);
+  }
+
+  /** Shallow-merge a patch into a staff member. No-op if the id is unknown. */
+  updateStaff(id: string, patch: Partial<StaffData>): void {
+    const staff = this.getStaff(id);
+    if (staff) Object.assign(staff, patch);
+  }
+
+  removeStaff(id: string): void {
+    const i = this.data.staff.findIndex((s) => s.id === id);
+    if (i >= 0) this.data.staff.splice(i, 1);
+  }
+
+  getStaffByRole(role: StaffRole): StaffData[] {
+    return this.data.staff.filter((s) => s.role === role);
+  }
+
+  /** First fully-idle staff member of a role (in the room, no operation), or undefined. */
+  idleStaffForRole(role: StaffRole): StaffData | undefined {
+    return this.data.staff.find(
+      (s) => s.role === role && s.state === "IDLE" && !s.operationId,
+    );
+  }
+
   setSelection(
-    kind: "AIRCRAFT" | "BUILDING" | "PASSENGER" | "GROUND_VEHICLE" | null,
+    kind:
+      | "AIRCRAFT"
+      | "BUILDING"
+      | "PASSENGER"
+      | "GROUND_VEHICLE"
+      | "GROUND_STAFF"
+      | null,
     id: string | null,
   ): void {
     this.data.selection = { kind, id };

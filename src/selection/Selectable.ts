@@ -5,7 +5,8 @@ export type SelectionKind =
   | "AIRCRAFT"
   | "BUILDING"
   | "PASSENGER"
-  | "GROUND_VEHICLE";
+  | "GROUND_VEHICLE"
+  | "GROUND_STAFF";
 
 /**
  * Anything selectable exposes a root Object3D (whose `userData.selectable`
