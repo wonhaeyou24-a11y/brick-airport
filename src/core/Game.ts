@@ -179,7 +179,11 @@ export class Game {
     this.scene.add(this.passengerManager.group);
 
     this.economy = new Economy(this.state);
-    this.groundOps = new GroundOperationManager(this.state, this.vehicleManager);
+    this.groundOps = new GroundOperationManager(
+      this.state,
+      this.vehicleManager,
+      this.staffManager,
+    );
     this.gateStatus = new GateStatusSync(this.state);
 
     this.selection = new SelectionManager(

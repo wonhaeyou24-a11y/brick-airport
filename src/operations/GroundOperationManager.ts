@@ -6,15 +6,18 @@ import type {
 } from "../core/GameState";
 import { isFlightOver, isServiceFacility } from "../core/GameState";
 import type { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
+import type { StaffManager } from "../staff/StaffManager";
 import {
   TURNAROUND_SEQUENCE,
   canCompleteGroundOperation,
   createGroundOperation,
+  getGroundOperationDuration,
   nextPendingOperation,
   vehicleTypeForOperation,
 } from "./GroundOperation";
 import { computeGroundEfficiency } from "./AirportOperations";
 import { OPERATIONS_CONFIG as C } from "./OperationsConfig";
+import { roleForOperation, staffSkillModifier } from "../staff/StaffConfig";
 import type { GroundVehicleType } from "../core/GameState";
 
 /** What Game must act on after a ground-operations tick. */
@@ -28,6 +31,8 @@ export interface GroundOpActivity {
   flightId: string;
   type: GroundOperationType;
   state: GroundOperationState;
+  /** True when the task is PENDING because no staff of its role is free (§D.4). */
+  needsStaff?: boolean;
 }
 
 const OP_ICON: Record<string, string> = {
@@ -66,12 +71,15 @@ export class GroundOperationManager {
   private readonly readyAnnounced = new Set<string>();
   /** operationId -> game-seconds it has sat PENDING (for the delay check). */
   private readonly pendingTime = new Map<string, number>();
-  /** Recent finished tasks — true = it was delayed waiting for a vehicle (§38). */
+  /** Recent finished tasks — true = it was delayed waiting for a resource (§38). */
   private readonly recentOps: boolean[] = [];
+  /** operationIds currently blocked because no matching staff is free (§D.4). */
+  private readonly staffBlocked = new Set<string>();
 
   constructor(
     private readonly state: GameState,
     private readonly vehicles: GroundVehicleManager,
+    private readonly staff: StaffManager,
   ) {
     this.recomputeEfficiency();
   }
@@ -97,7 +105,14 @@ export class GroundOperationManager {
       const cur = nextPendingOperation(
         this.state.getGroundOperationsForFlight(flightId),
       );
-      if (cur) rows.push({ flightId, type: cur.type, state: cur.state });
+      if (cur) {
+        rows.push({
+          flightId,
+          type: cur.type,
+          state: cur.state,
+          needsStaff: this.staffBlocked.has(cur.id),
+        });
+      }
     }
 
     const done = this.state.data.groundOperations
@@ -147,6 +162,10 @@ export class GroundOperationManager {
   /**
    * Advance the current task for every in-progress turnaround. Only the first
    * unfinished task (in sequence order) is worked at a time (spec §25).
+   *
+   * A task needs BOTH a role-matched staff member AND a matching vehicle before
+   * it starts — staff is claimed first (spec §D.2). It stays PENDING (never
+   * fails) while either is unavailable (spec §D.4).
    */
   private advanceOperations(deltaTime: number, notices: string[]): void {
     for (const flightId of this.turnaroundStarted) {
@@ -155,19 +174,30 @@ export class GroundOperationManager {
       if (!op) continue;
 
       switch (op.state) {
-        case "PENDING":
+        case "PENDING": {
           this.pendingTime.set(
             op.id,
             (this.pendingTime.get(op.id) ?? 0) + deltaTime,
           );
-          this.tryAssignVehicle(op, notices);
+          if (!op.staffId) this.tryAssignStaff(op);
+          if (op.staffId && !op.vehicleId) this.tryAssignVehicle(op);
+          if (op.staffId && op.vehicleId) this.markAssigned(op);
           break;
-        case "ASSIGNED":
-          if (op.vehicleId && this.vehicles.isAtWork(op.vehicleId)) {
+        }
+        case "ASSIGNED": {
+          const vehReady =
+            !op.vehicleId || this.vehicles.isAtWork(op.vehicleId);
+          const staffReady = !op.staffId || this.staff.isAtWork(op.staffId);
+          if (vehReady && staffReady) {
             op.state = "IN_PROGRESS";
             op.startedAt = Date.now();
+            op.duration = this.workDuration(op);
+            notices.push(
+              `${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} started`,
+            );
           }
           break;
+        }
         case "IN_PROGRESS":
           op.elapsed = (op.elapsed ?? 0) + deltaTime;
           if (canCompleteGroundOperation(op)) {
@@ -180,21 +210,40 @@ export class GroundOperationManager {
     }
   }
 
-  private tryAssignVehicle(op: GroundOperationData, notices: string[]): void {
-    const type = vehicleTypeForOperation(op.type) as GroundVehicleType;
-    const vehicle = this.state.idleGroundVehicle(type);
-    if (!vehicle) return; // busy — the task waits (spec §35, §36)
+  /** Base task time scaled by the assigned staff member's skill (spec §D.3). */
+  private workDuration(op: GroundOperationData): number {
+    const base = getGroundOperationDuration(op.type);
+    const staff = this.state.getStaff(op.staffId);
+    return staff ? base * staffSkillModifier(staff.skill) : base;
+  }
 
-    if (this.vehicles.dispatch(vehicle.id, op.id)) {
-      this.markAssigned(op, vehicle.id);
-      notices.push(`${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} started`);
+  /** Claim a role-matched idle staff member for a task (spec §C.1, §C.2). */
+  private tryAssignStaff(op: GroundOperationData): void {
+    const role = roleForOperation(op.type);
+    const staff = this.state.idleStaffForRole(role);
+    if (!staff) {
+      this.staffBlocked.add(op.id); // "STAFF REQUIRED" — the task waits (§D.4)
+      return;
+    }
+    if (this.staff.assign(staff.id, op.id)) {
+      op.staffId = staff.id;
+      this.staffBlocked.delete(op.id);
     }
   }
 
-  /** Attach a vehicle to a task and flag it delayed if it waited too long (§35). */
-  private markAssigned(op: GroundOperationData, vehicleId: string): void {
+  private tryAssignVehicle(op: GroundOperationData): void {
+    const type = vehicleTypeForOperation(op.type) as GroundVehicleType;
+    const vehicle = this.state.idleGroundVehicle(type);
+    if (!vehicle) return; // busy — the task waits (spec §35, §36)
+    if (this.vehicles.dispatch(vehicle.id, op.id)) {
+      op.vehicleId = vehicle.id;
+    }
+  }
+
+  /** Move a task to ASSIGNED and flag it delayed if it waited too long (§35). */
+  private markAssigned(op: GroundOperationData): void {
     op.state = "ASSIGNED";
-    op.vehicleId = vehicleId;
+    this.staffBlocked.delete(op.id);
     const waited = this.pendingTime.get(op.id) ?? 0;
     this.pendingTime.delete(op.id);
     if (waited > C.ground.pendingDelayThreshold) {
@@ -209,21 +258,24 @@ export class GroundOperationManager {
     notices: string[],
   ): void {
     const vehicleId = op.vehicleId ?? null;
+    const staffId = op.staffId ?? null;
     const vehicleType = vehicleTypeForOperation(op.type);
-    this.state.completeGroundOperation(op.id);
+    const role = roleForOperation(op.type);
+    this.state.completeGroundOperation(op.id); // clears vehicleId + staffId
     this.recordCompletion(op);
     notices.push(`${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} completed`);
 
-    if (!vehicleId) return;
-
-    // Shuttle the vehicle straight to another gate that needs it, if any —
-    // otherwise send it home.
-    const waiting = this.findWaitingOperation(vehicleType, op.id);
-    if (waiting && this.vehicles.redirect(vehicleId, waiting.id)) {
-      this.markAssigned(waiting, vehicleId);
-      notices.push(`${OP_ICON[waiting.type] ?? "🔧"} ${opWords(waiting.type)} started`);
-    } else {
-      this.vehicles.recall(vehicleId);
+    // Shuttle the vehicle / staff straight to another gate that needs them,
+    // else send them home.
+    if (vehicleId) {
+      const w = this.findWaitingOperation(vehicleType);
+      if (w && this.vehicles.redirect(vehicleId, w.id)) w.vehicleId = vehicleId;
+      else this.vehicles.recall(vehicleId);
+    }
+    if (staffId) {
+      const w = this.findWaitingOperationForRole(role);
+      if (w && this.staff.redirect(staffId, w.id)) w.staffId = staffId;
+      else this.staff.recall(staffId);
     }
   }
 
@@ -246,19 +298,39 @@ export class GroundOperationManager {
     });
   }
 
-  /** A PENDING task, next-in-sequence for its flight, that needs this vehicle type. */
+  /** A PENDING task, next-in-sequence for its flight, still needing this vehicle type. */
   private findWaitingOperation(
     vehicleType: string,
-    excludeOpId: string,
   ): GroundOperationData | undefined {
     for (const flightId of this.turnaroundStarted) {
-      const ops = this.state.getGroundOperationsForFlight(flightId);
-      const op = nextPendingOperation(ops);
+      const op = nextPendingOperation(
+        this.state.getGroundOperationsForFlight(flightId),
+      );
       if (
         op &&
-        op.id !== excludeOpId &&
         op.state === "PENDING" &&
+        !op.vehicleId &&
         vehicleTypeForOperation(op.type) === vehicleType
+      ) {
+        return op;
+      }
+    }
+    return undefined;
+  }
+
+  /** A PENDING task, next-in-sequence for its flight, still needing this role. */
+  private findWaitingOperationForRole(
+    role: string,
+  ): GroundOperationData | undefined {
+    for (const flightId of this.turnaroundStarted) {
+      const op = nextPendingOperation(
+        this.state.getGroundOperationsForFlight(flightId),
+      );
+      if (
+        op &&
+        op.state === "PENDING" &&
+        !op.staffId &&
+        roleForOperation(op.type) === role
       ) {
         return op;
       }
@@ -288,6 +360,7 @@ export class GroundOperationManager {
         this.readyAnnounced.delete(flightId);
         for (const op of this.state.getGroundOperationsForFlight(flightId)) {
           this.pendingTime.delete(op.id);
+          this.staffBlocked.delete(op.id);
         }
       }
     }
