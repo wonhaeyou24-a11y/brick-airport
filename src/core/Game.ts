@@ -168,6 +168,8 @@ export class Game {
   private shownGroundOpsSig = "";
   /** Signature of the airport status indicator (V1.5). */
   private shownAirportStatusSig = "";
+  /** Grid visibility to restore when leaving build mode (V1.6 §10); null while not in build mode. */
+  private gridVisibleBeforeBuild: boolean | null = null;
   /** Signature of the "다음 목표" growth-goal panel (V1.6). */
   private shownGrowthGoalSig = "";
   /** Signature of the Missions panel (V1.0-E). */
@@ -557,6 +559,7 @@ export class Game {
       );
       return false;
     }
+    const fromTier = expansionTier(level);
     const tier = expansionTier(level + 1);
     if (!this.state.spendMoney(tier.cost)) {
       this.hud.showNotice("잔액이 부족합니다");
@@ -567,8 +570,11 @@ export class Game {
     this.expansionOverlay.setLevel(level + 1);
     this.cameraController.setHomeViewSize(tier.worldSize * 0.96);
     this.cameraController.setPanBounds(tier.worldSize / 2);
+    // Expansion confirmation (spec §13) — from/to size + cost, same pair as
+    // the build-confirmation notice pattern (showNotice + showSpend).
     this.hud.showNotice(
-      `공항이 ${tier.worldSize}×${tier.worldSize}로 확장되었습니다!`,
+      `공항 확장 완료!\n${fromTier.worldSize}×${fromTier.worldSize} → ${tier.worldSize}×${tier.worldSize}`,
+      3200,
     );
     this.requestEventSave();
     return true;
@@ -686,6 +692,15 @@ export class Game {
     this.selection.setPickingEnabled(!this.buildController.isActive);
 
     if (state.mode === "PLACEMENT") {
+      // Grid ON for the duration of build mode (spec §10) — restored to
+      // whatever the player's own GRID toggle had it at, the moment they
+      // leave. Only acts on the IDLE->PLACEMENT edge, not on every hover
+      // update this same handler also receives while already placing.
+      if (this.gridVisibleBeforeBuild === null) {
+        this.gridVisibleBeforeBuild = this.world.isGridVisible();
+        this.world.setGridVisible(true);
+      }
+
       this.selection.select(null);
       this.state.setSelection(null, null);
       this.cameraController.followTarget(null);
@@ -704,6 +719,10 @@ export class Game {
         ],
       });
     } else {
+      if (this.gridVisibleBeforeBuild !== null) {
+        this.world.setGridVisible(this.gridVisibleBeforeBuild);
+        this.gridVisibleBeforeBuild = null;
+      }
       this.buildingPreview.hide();
       this.hud.setSelection(null);
     }
