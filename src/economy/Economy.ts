@@ -59,4 +59,14 @@ export class Economy {
     airport.totalRevenue = (airport.totalRevenue ?? 0) + amount;
     airport.totalPassengers = (airport.totalPassengers ?? 0) + passengers;
   }
+
+  /**
+   * Credit the balance for a mission / event reward (V1.0-D). Deliberately does
+   * NOT touch totalRevenue or totalPassengers — a reward is not ticket income,
+   * so the revenue statistics keep their meaning (spec §8).
+   */
+  grantReward(amount: number): void {
+    if (amount <= 0) return;
+    this.state.data.airport.money += amount;
+  }
 }

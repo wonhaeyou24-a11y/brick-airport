@@ -98,6 +98,18 @@ export class OperationsManager {
     );
   }
 
+  /**
+   * Apply a mission / event reputation reward (V1.0-D). Reuses the existing
+   * `airport.reputation` field + the operations clamp — no new reputation
+   * system (spec §9). A small bounded bump, distinct from the per-flight drift.
+   */
+  grantReputation(amount: number): void {
+    if (amount === 0) return;
+    this.state.airport.reputation = clampScore(
+      this.state.airport.reputation + amount,
+    );
+  }
+
   /** Airport satisfaction = recent flight averages, plus any event lift. */
   private recomputeAirportSatisfaction(): void {
     let s = computeAirportSatisfaction(this.recentSatisfaction);
