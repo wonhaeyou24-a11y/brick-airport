@@ -164,6 +164,8 @@ export class Game {
   private shownOperationsSig = "";
   /** Signature of the Ground Operations panel (V0.8-E). */
   private shownGroundOpsSig = "";
+  /** Signature of the airport status indicator (V1.5). */
+  private shownAirportStatusSig = "";
   /** Signature of the Missions panel (V1.0-E). */
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
@@ -1078,6 +1080,7 @@ export class Game {
     this.refreshDynamicStats();
     this.refreshStatistics();
     this.refreshOperations();
+    this.refreshAirportStatus();
     this.refreshFlightHistory();
     this.refreshGroundOps();
     this.refreshMissions();
@@ -1143,6 +1146,54 @@ export class Game {
         };
       }),
     );
+  }
+
+  /**
+   * Airport-wide status indicator (V1.5 §6) — a one-line read of existing
+   * GroundOperation / Staff / Flight / Event state, in priority order.
+   * Computed fresh every check; nothing here is a new persisted value.
+   */
+  private computeAirportStatus(): { label: string; tone: "good" | "warn" | "alert" } {
+    if (this.state.data.operationalEvents.some((e) => e.state === "ACTIVE")) {
+      return { label: t("statusEvent"), tone: "alert" };
+    }
+
+    const staffNeeded = this.state.data.groundOperations.some(
+      (o) => (o.state === "PENDING" || o.state === "ASSIGNED") && !o.staffId,
+    );
+    const allStaffBusy =
+      this.staffManager.count > 0 &&
+      this.staffManager.activeCount >= this.staffManager.count;
+    if (allStaffBusy && staffNeeded) {
+      return { label: t("statusStaffShortage"), tone: "warn" };
+    }
+
+    if ((this.state.operations.groundEfficiency ?? 100) < 50) {
+      return { label: t("statusGroundDelay"), tone: "warn" };
+    }
+
+    const allGatesBusy =
+      this.state.data.gates.length > 0 &&
+      this.state.data.gates.every((g) => g.status !== "AVAILABLE");
+    const flightsWaiting = this.state.data.flights.some((f) => f.state === "SCHEDULED");
+    if (allGatesBusy && flightsWaiting) {
+      return { label: t("statusFlightBacklog"), tone: "warn" };
+    }
+
+    const capacity = this.facilities.getFacilityEffects().passengerCapacity;
+    if (capacity > 0 && this.state.data.passengers.length > capacity * 0.9) {
+      return { label: t("statusCongested"), tone: "warn" };
+    }
+
+    return { label: t("statusNormal"), tone: "good" };
+  }
+
+  private refreshAirportStatus(): void {
+    const info = this.computeAirportStatus();
+    const sig = `${info.label}|${info.tone}`;
+    if (sig === this.shownAirportStatusSig) return;
+    this.shownAirportStatusSig = sig;
+    this.hud.setAirportStatus(info);
   }
 
   /**

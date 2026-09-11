@@ -100,6 +100,15 @@ export interface OperationsInfo {
   groundEfficiency: number;
 }
 
+/** Airport-wide operating status at a glance (V1.5 §6) — computed by Game
+ *  from existing GroundOperation/Staff/Flight/Event state, never a new
+ *  persisted value. */
+export interface AirportStatusInfo {
+  label: string;
+  /** "good" = normal, "warn" = something needs attention, "alert" = an event is active. */
+  tone: "good" | "warn" | "alert";
+}
+
 export interface HudCallbacks {
   onZoomIn(): void;
   onZoomOut(): void;
@@ -144,6 +153,7 @@ export class HUD {
   private readonly eventsEl: HTMLElement;
   private readonly eventsListEl: HTMLElement;
   private readonly saveStatusEl: HTMLElement;
+  private readonly airportStatusEl: HTMLElement;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -185,6 +195,7 @@ export class HUD {
     this.eventsEl = this.must(".js-events");
     this.eventsListEl = this.must(".js-events-list");
     this.saveStatusEl = this.must(".js-save-status");
+    this.airportStatusEl = this.must(".js-airport-status");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -200,6 +211,12 @@ export class HUD {
     this.saveStatusEl.textContent =
       status === "SAVED" ? `● ${t("saved")}` : status === "ERROR" ? `● ${t("saveError")}` : "";
     this.saveStatusEl.classList.toggle("save-error", status === "ERROR");
+  }
+
+  /** Airport-wide status badge next to the title (spec §6). */
+  setAirportStatus(info: AirportStatusInfo): void {
+    this.airportStatusEl.textContent = `● ${info.label}`;
+    this.airportStatusEl.className = `airport-status js-airport-status tone-${info.tone}`;
   }
 
   setStats(stats: HudStats): void {
@@ -440,6 +457,7 @@ function buildTemplate(): string {
     <div class="hud-panel hud-title">
       Brick Airport
       <small class="js-airport-name">My Airport</small>
+      <b class="airport-status js-airport-status tone-good">● ${t("statusNormal")}</b>
       <b class="save-status js-save-status" hidden></b>
     </div>
     <div class="hud-panel hud-stats">
