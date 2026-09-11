@@ -10,6 +10,7 @@ import type {
   BuildingType,
   FlightData,
   FlightState,
+  GameStateData,
   OperationalEventType,
 } from "./GameState";
 import { GameLoop } from "./GameLoop";
@@ -41,6 +42,8 @@ import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { MissionManager } from "../missions/MissionManager";
 import { OperationalEventManager } from "../events/OperationalEventManager";
 import { FacilityManager } from "../buildings/FacilityManager";
+import { SaveManager } from "../save/SaveManager";
+import { clearTransientSelection } from "../save/SaveData";
 import {
   TURNAROUND_SEQUENCE,
   operationGlyph,
@@ -98,6 +101,8 @@ export class Game {
   private readonly missions: MissionManager;
   private readonly operationalEvents: OperationalEventManager;
   private readonly facilities: FacilityManager;
+  private readonly saveManager = new SaveManager();
+  private saveStatus: "IDLE" | "SAVED" | "ERROR" = "IDLE";
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -123,7 +128,12 @@ export class Game {
   /** Signature of the Operational Events panel (V1.0-E). */
   private shownEventsSig = "";
 
-  constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    hudContainer: HTMLElement,
+    initialData?: GameStateData,
+    bootNotice?: string,
+  ) {
     this.canvas = canvas;
 
     const { clientWidth: w, clientHeight: h } = canvas.parentElement ?? canvas;
@@ -139,7 +149,14 @@ export class Game {
 
     this.addLights();
 
-    this.state = new GameState();
+    // Loading a save (spec §B.6/§B.7): GameState's own constructor is already
+    // the full migration pipeline (old version -> current schema), and every
+    // manager below already builds its meshes FROM this.state.data — so
+    // handing it a restored GameStateData here, instead of always creating a
+    // fresh one, is the entire "World rebuild" step. No separate reconstruction
+    // path, no manager rewritten.
+    this.state = new GameState(initialData);
+    clearTransientSelection(this.state.data);
 
     this.cameraController = new CameraController(canvas, w, h);
 
@@ -246,11 +263,54 @@ export class Game {
 
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
+
+    if (bootNotice) this.hud.showNotice(bootNotice, 4000);
   }
 
   start(): void {
     this.onResize();
     this.loop.start();
+  }
+
+  // ------------------------------------------------------------- save/load
+
+  hasSave(): boolean {
+    return this.saveManager.hasSave();
+  }
+
+  /** Current save-status badge for the HUD (V1.2-E). */
+  getSaveStatus(): "IDLE" | "SAVED" | "ERROR" {
+    return this.saveStatus;
+  }
+
+  /**
+   * Write the current GameStateData now (spec §B.4). Synchronous — localStorage
+   * has no async API — but still goes through the same outcome shape a future
+   * async backend would need, so callers don't have to change later.
+   */
+  save(): boolean {
+    const result = this.saveManager.save(this.state.data);
+    this.saveStatus = result.ok ? "SAVED" : "ERROR";
+    if (!result.ok) this.hud.showNotice("Save failed — previous save kept.");
+    return result.ok;
+  }
+
+  /**
+   * Ask to restore the last save. A reload is the safest way to rebuild the
+   * whole object graph (Scene/renderer/every manager) from restored data
+   * without a second "resync" path alongside the constructor's normal one
+   * (spec §0 — no manager gets a rewrite for this). main.ts already loads the
+   * save on boot when one exists, so a plain reload IS the load.
+   */
+  requestLoad(): void {
+    if (!this.saveManager.hasSave()) {
+      this.hud.showNotice("No save to load.");
+      return;
+    }
+    if (!window.confirm("Load the last save? Unsaved progress will be lost.")) {
+      return;
+    }
+    window.location.reload();
   }
 
   dispose(): void {
