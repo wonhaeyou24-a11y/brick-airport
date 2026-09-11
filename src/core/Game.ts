@@ -37,11 +37,13 @@ import {
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
 import { computeAirportLevel } from "../progression/AirportProgression";
+import { checkExpansion, expansionBounds, expansionTier } from "../progression/Expansion";
 import { OperationsManager } from "../operations/OperationsManager";
 import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { MissionManager } from "../missions/MissionManager";
 import { OperationalEventManager } from "../events/OperationalEventManager";
 import { FacilityManager } from "../buildings/FacilityManager";
+import { ExpansionOverlay } from "../world/ExpansionOverlay";
 import { SaveManager } from "../save/SaveManager";
 import { clearTransientSelection } from "../save/SaveData";
 import {
@@ -99,6 +101,7 @@ export class Game {
   private readonly occupancy: GridOccupancy;
   private readonly gridCursor: GridCursor;
   private readonly buildingPreview: BuildingPreview;
+  private readonly expansionOverlay: ExpansionOverlay;
   private readonly buildController: BuildController;
   private readonly aircraftManager: AircraftManager;
   private readonly flightScheduler: FlightScheduler;
@@ -187,6 +190,13 @@ export class Game {
     this.buildingPreview = new BuildingPreview();
     this.scene.add(this.buildingPreview.object);
 
+    this.expansionOverlay = new ExpansionOverlay();
+    this.expansionOverlay.setLevel(this.state.airport.expansionLevel ?? 0);
+    this.scene.add(this.expansionOverlay.object);
+    this.cameraController.setHomeViewSize(
+      expansionTier(this.state.airport.expansionLevel ?? 0).worldSize * 0.96,
+    );
+
     this.buildController = new BuildController(
       this.occupancy,
       this.buildingPreview,
@@ -197,6 +207,7 @@ export class Game {
         commit: (data) => this.commitBuilding(data),
         onModeChange: (s) => this.onBuildModeChange(s),
       },
+      () => expansionBounds(this.state.airport.expansionLevel ?? 0),
     );
 
     this.aircraftManager = new AircraftManager(this.state);
@@ -375,6 +386,7 @@ export class Game {
     this.staffManager.dispose();
     this.aircraftManager.dispose();
     this.buildingPreview.dispose();
+    this.expansionOverlay.dispose();
     this.gridCursor.dispose();
     this.world.dispose();
     this.renderer.dispose();
@@ -460,6 +472,48 @@ export class Game {
         ? `Requires Airport Level ${purchase.requiredLevel}`
         : "Not enough money",
     );
+  }
+
+  // ---------------------------------------------------------- expansion
+
+  /**
+   * Buy the next expansion tier (spec §D.4). Mirrors commitBuilding's
+   * purchase pattern: re-check atomically, deduct, then apply — nothing
+   * changes on any failure. Existing buildings/gates/aircraft never move
+   * (expansion only widens PlacementSystem's allowed region — see
+   * progression/Expansion.ts and world/cells.ts's GRID_COLS/ROWS ceiling).
+   */
+  expandAirport(): boolean {
+    const level = this.state.airport.expansionLevel ?? 0;
+    const result = checkExpansion(
+      level,
+      this.state.airport.level,
+      this.state.airport.money,
+    );
+    if (!result.ok) {
+      this.hud.showNotice(
+        result.reason === "LOCKED"
+          ? `Requires Airport Level ${result.requiredLevel}`
+          : result.reason === "MAX_LEVEL"
+            ? "Airport is fully expanded"
+            : "Not enough money",
+      );
+      return false;
+    }
+    const tier = expansionTier(level + 1);
+    if (!this.state.spendMoney(tier.cost)) {
+      this.hud.showNotice("Not enough money");
+      return false;
+    }
+    this.hud.showSpend(tier.cost);
+    this.state.airport.expansionLevel = level + 1;
+    this.expansionOverlay.setLevel(level + 1);
+    this.cameraController.setHomeViewSize(tier.worldSize * 0.96);
+    this.hud.showNotice(
+      `Airport expanded to ${tier.worldSize}×${tier.worldSize}!`,
+    );
+    this.requestEventSave();
+    return true;
   }
 
   private addLights(): void {
@@ -1304,7 +1358,9 @@ function capitalize(text: string): string {
 
 function validityText(v: PlacementValidity): string {
   if (v.valid) return "VALID";
-  return v.reason === "OUT_OF_BOUNDS" ? "INVALID (out of bounds)" : "INVALID (occupied)";
+  if (v.reason === "OUT_OF_BOUNDS") return "INVALID (out of bounds)";
+  if (v.reason === "OUTSIDE_EXPANSION") return "INVALID (expand airport first)";
+  return "INVALID (occupied)";
 }
 
 /** Combined placement + purchase status for the BUILD MODE HUD line. */

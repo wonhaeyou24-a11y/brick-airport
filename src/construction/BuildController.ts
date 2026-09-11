@@ -1,6 +1,6 @@
 import type { BuildingData, BuildingType } from "../core/GameState";
 import type { GridOccupancy } from "../world/GridOccupancy";
-import type { CellCoord } from "../world/cells";
+import type { CellBounds, CellCoord } from "../world/cells";
 import type { PurchaseResult } from "../buildings/BuildingConfig";
 import { PlacementSystem, type PlacementValidity } from "./PlacementSystem";
 import type { BuildingPreview } from "./BuildingPreview";
@@ -52,8 +52,9 @@ export class BuildController {
     occupancy: GridOccupancy,
     private readonly preview: BuildingPreview,
     private readonly hooks: BuildControllerHooks,
+    getExpansionBounds?: () => CellBounds,
   ) {
-    this.placement = new PlacementSystem(occupancy);
+    this.placement = new PlacementSystem(occupancy, getExpansionBounds);
   }
 
   get isActive(): boolean {

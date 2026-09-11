@@ -3,6 +3,8 @@ import { makeBuilding } from "../core/GameState";
 import type { GridOccupancy } from "../world/GridOccupancy";
 import {
   isFootprintInsideGrid,
+  isFootprintInsideBounds,
+  type CellBounds,
   type CellCoord,
   type CellSize,
 } from "../world/cells";
@@ -25,7 +27,10 @@ export type PlacementValidity =
   | { valid: true }
   | { valid: false; reason: PlacementReason };
 
-export type PlacementReason = "OUT_OF_BOUNDS" | "CELL_OCCUPIED";
+export type PlacementReason =
+  | "OUT_OF_BOUNDS"
+  | "CELL_OCCUPIED"
+  | "OUTSIDE_EXPANSION";
 
 /** Default footprints per building type (grid cells). */
 export const BUILDING_FOOTPRINTS: Record<BuildingType, CellSize> = {
@@ -47,7 +52,11 @@ export class PlacementSystem {
   private activeType: BuildingType | null = null;
   private pointerCell: CellCoord | null = null;
 
-  constructor(private readonly occupancy: GridOccupancy) {}
+  constructor(
+    private readonly occupancy: GridOccupancy,
+    /** Current buildable rectangle (V1.2-D). Defaults to the whole grid. */
+    private readonly getExpansionBounds?: () => CellBounds,
+  ) {}
 
   get isActive(): boolean {
     return this.activeType !== null;
@@ -80,6 +89,10 @@ export class PlacementSystem {
     if (!cell || !size) return { valid: false, reason: "OUT_OF_BOUNDS" };
     if (!isFootprintInsideGrid(cell, size)) {
       return { valid: false, reason: "OUT_OF_BOUNDS" };
+    }
+    const bounds = this.getExpansionBounds?.();
+    if (bounds && !isFootprintInsideBounds(cell, size, bounds)) {
+      return { valid: false, reason: "OUTSIDE_EXPANSION" };
     }
     if (!this.occupancy.isFootprintFree(cell, size)) {
       return { valid: false, reason: "CELL_OCCUPIED" };

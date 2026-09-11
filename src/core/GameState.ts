@@ -357,7 +357,7 @@ export const DEFAULT_OPERATIONS: OperationsData = {
 };
 
 /** Current on-disk state schema version. Older states migrate up in the ctor. */
-export const STATE_VERSION = "1.1.0";
+export const STATE_VERSION = "1.2.0";
 
 export interface AirportData {
   id: string;
@@ -373,6 +373,8 @@ export interface AirportData {
   totalFlights?: number;
   /** Live operating metrics (V0.7-A). Optional for pre-V0.7 states. */
   operations?: OperationsData;
+  /** Airport expansion tier (V1.2-D) — index into Expansion.EXPANSION_TIERS. Optional for pre-V1.2 states. */
+  expansionLevel?: number;
 }
 
 export interface BuildingData {
@@ -639,6 +641,7 @@ export function createInitialState(): GameStateData {
       totalPassengers: 0,
       totalFlights: 0,
       operations: { ...DEFAULT_OPERATIONS },
+      expansionLevel: 0,
     },
     buildings: [
       makeBuilding({
@@ -791,6 +794,10 @@ export class GameState {
     // Forward-compat: a state saved before V1.0 has no missions / events.
     if (!this.data.missions) this.data.missions = [];
     if (!this.data.operationalEvents) this.data.operationalEvents = [];
+    // Forward-compat: a state saved before V1.2 has no expansion level.
+    if (typeof this.data.airport.expansionLevel !== "number") {
+      this.data.airport.expansionLevel = 0;
+    }
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
   }

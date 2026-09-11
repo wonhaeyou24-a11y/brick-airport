@@ -7,8 +7,16 @@
  */
 
 export const CELL_SIZE = 2;
-export const GRID_COLS = 24;
-export const GRID_ROWS = 24;
+/**
+ * Grid ceiling (V1.2-D): sized for the LARGEST airport expansion tier
+ * (80x80 world units = 40 cells), not just the starting airport. Ground and
+ * Grid are built once at this size at startup and never rebuilt — expansion
+ * only widens the playable region within it (see progression/Expansion.ts),
+ * so worldToCell()/cellToWorld() never change meaning and nothing has to
+ * regenerate geometry at runtime (spec §D.2, §D.10).
+ */
+export const GRID_COLS = 40;
+export const GRID_ROWS = 40;
 
 export const GRID_WIDTH = GRID_COLS * CELL_SIZE;
 export const GRID_DEPTH = GRID_ROWS * CELL_SIZE;
@@ -45,6 +53,30 @@ export function isFootprintInsideGrid(cell: CellCoord, size: CellSize): boolean 
   return (
     isCellInsideGrid(cell.col, cell.row) &&
     isCellInsideGrid(cell.col + size.cols - 1, cell.row + size.rows - 1)
+  );
+}
+
+/** A rectangular sub-region of the grid, in the same col/row space (V1.2-D). */
+export interface CellBounds {
+  minCol: number;
+  maxCol: number;
+  minRow: number;
+  maxRow: number;
+}
+
+/** Whether a whole footprint fits inside an arbitrary (e.g. expansion) boundary. */
+export function isFootprintInsideBounds(
+  cell: CellCoord,
+  size: CellSize,
+  bounds: CellBounds,
+): boolean {
+  const endCol = cell.col + size.cols - 1;
+  const endRow = cell.row + size.rows - 1;
+  return (
+    cell.col >= bounds.minCol &&
+    endCol <= bounds.maxCol &&
+    cell.row >= bounds.minRow &&
+    endRow <= bounds.maxRow
   );
 }
 

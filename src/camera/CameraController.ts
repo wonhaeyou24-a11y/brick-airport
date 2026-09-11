@@ -28,6 +28,8 @@ export class CameraController {
   private readonly viewDir = new THREE.Vector3(1, 0.92, -1).normalize();
 
   private viewSize = DEFAULT_VIEW_SIZE;
+  /** The size `reset()` returns to — normally DEFAULT_VIEW_SIZE, widened after an airport expansion (V1.2-D). */
+  private homeViewSize = DEFAULT_VIEW_SIZE;
   private aspect = 1;
 
   /** Non-null while a focus glide is in progress. */
@@ -75,10 +77,24 @@ export class CameraController {
   reset(): void {
     this.focusGoal = null;
     this.followObject = null;
-    this.viewSize = DEFAULT_VIEW_SIZE;
+    this.viewSize = this.homeViewSize;
     this.target.copy(DEFAULT_TARGET);
     this.updateFrustum();
     this.applyTransform();
+  }
+
+  /**
+   * Widen (or restore) the framing `reset()` returns to, e.g. after an
+   * airport expansion so "reset view" still shows the whole airport
+   * (spec §D.9). Reuses reset()/focusOn() as the only camera entry points —
+   * no new camera mode.
+   */
+  setHomeViewSize(viewSize: number): void {
+    this.homeViewSize = THREE.MathUtils.clamp(
+      viewSize,
+      MIN_VIEW_SIZE,
+      MAX_VIEW_SIZE,
+    );
   }
 
   /** Start gliding the view so `position` moves toward screen centre. */
