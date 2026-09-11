@@ -505,10 +505,33 @@ export class Game {
       const name = gate
         ? `${t("gate")} ${gateName(gate.id)}`
         : buildingLabel(data.type);
-      this.hud.showNotice(`${name} 건설 완료`, 1800);
+      const benefit = this.growthBenefitLine(data.type);
+      this.hud.showNotice(
+        benefit ? `${name} 건설 완료\n${benefit}` : `${name} 건설 완료`,
+        2200,
+      );
       this.requestEventSave(); // a free console placeBuilding() doesn't count
     }
     return true;
+  }
+
+  /**
+   * "왜 이 건설이 필요한가" line (spec §20) — only when the type has a real,
+   * already-computed effect (FacilityConfig / the gate-slot mechanism); no
+   * effect, no line, never an exaggerated generic sentence.
+   */
+  private growthBenefitLine(type: BuildingType): string | null {
+    if (type === "GATE") return "더 많은 항공편을 처리할 수 있습니다.";
+    if (type === "RUNWAY") return "이착륙 처리 능력이 늘어납니다.";
+    if (type === "TERMINAL") return "승객 처리 능력이 증가합니다.";
+    if (isServiceFacility(type)) {
+      const effect = getFacilityEffect(type);
+      const parts: string[] = [];
+      if (effect.comfort) parts.push(`쾌적함 +${effect.comfort}`);
+      if (effect.service) parts.push(`서비스 +${effect.service}`);
+      return parts.length > 0 ? `${parts.join(" · ")} 효과가 적용됩니다.` : null;
+    }
+    return null;
   }
 
   private onBuildTypeSelected(type: BuildingType): void {
