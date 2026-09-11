@@ -53,7 +53,8 @@ const DICT: Record<string, Record<Locale, string>> = {
   // Panel titles
   missions: { ko: "임무", en: "Missions" },
   operationalEvent: { ko: "운영 이벤트", en: "Operational Event" },
-  recentFlights: { ko: "최근 항공편", en: "Recent Flights" },
+  recentFlights: { ko: "최근 운항", en: "Recent Flights" },
+  activeFlights: { ko: "현재 운항", en: "Current Flights" },
   groundOperations: { ko: "지상조업", en: "Ground Operations" },
   airportStatistics: { ko: "공항 통계", en: "Airport Statistics" },
   operations: { ko: "운영 현황", en: "Operations" },

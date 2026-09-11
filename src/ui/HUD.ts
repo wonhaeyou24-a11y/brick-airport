@@ -53,6 +53,29 @@ export interface FlightHistoryEntry {
   satisfaction?: number;
 }
 
+/**
+ * One row of the "현재 운항" (Flight Status Board) panel (V1.7 §19-20) — a
+ * flight that has not reached COMPLETED/CANCELLED yet. A sibling of the
+ * Recent Flights panel above it, never a replacement: Recent Flights still
+ * shows only finished flights, unchanged.
+ */
+export interface ActiveFlightEntry {
+  id: string;
+  route: string;
+  /** Localized flight-state label, e.g. "탑승 중". */
+  statusText: string;
+}
+
+/**
+ * Notice priority tiers (V1.7 §23): 1 = important (takeoff/arrival, level up,
+ * expansion, mission/event), 2 = operations (boarding, task complete, staff
+ * shortage, gate ready), 3 = general (build confirmations, minor changes).
+ * A lower-numbered notice already on screen is not interrupted by an
+ * equal-or-lower-priority one — this is the only new logic; the toast itself
+ * is still the single existing `.js-notice` element (no new UI/queue).
+ */
+export type NoticePriority = 1 | 2 | 3;
+
 /** One row of the Ground Operations panel (V0.8-E / V0.9-E). */
 export interface GroundOpRow {
   flightId: string;
@@ -158,6 +181,8 @@ export class HUD {
   private readonly noticeEl: HTMLElement;
   private readonly flightHistoryEl: HTMLElement;
   private readonly flightHistoryListEl: HTMLElement;
+  private readonly activeFlightsEl: HTMLElement;
+  private readonly activeFlightsListEl: HTMLElement;
   private readonly groundOpsEl: HTMLElement;
   private readonly groundOpsListEl: HTMLElement;
   private readonly missionsEl: HTMLElement;
@@ -172,6 +197,9 @@ export class HUD {
   private revenueTimer = 0;
   private noticeTimer = 0;
   private noticeHideTimer = 0;
+  /** Priority of the notice currently on screen, and when it stops guarding. */
+  private noticePriority: NoticePriority = 3;
+  private noticeGuardUntil = 0;
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.root = container;
@@ -202,6 +230,8 @@ export class HUD {
     this.noticeEl = this.must(".js-notice");
     this.flightHistoryEl = this.must(".js-flight-history");
     this.flightHistoryListEl = this.must(".js-flight-history-list");
+    this.activeFlightsEl = this.must(".js-active-flights");
+    this.activeFlightsListEl = this.must(".js-active-flights-list");
     this.groundOpsEl = this.must(".js-ground-ops");
     this.groundOpsListEl = this.must(".js-ground-ops-list");
     this.missionsEl = this.must(".js-missions");
@@ -269,8 +299,21 @@ export class HUD {
     }, ms);
   }
 
-  /** Temporary centred toast — level-up, "requires level N", "not enough money". */
-  showNotice(text: string, ms = 2600): void {
+  /**
+   * Temporary centred toast — level-up, "requires level N", "not enough
+   * money", ground-op progress, etc. `priority` (V1.7 §23, default 2 =
+   * operations) guards against noise: while a strictly more important notice
+   * is still showing, an equal-or-lower priority one is dropped instead of
+   * cutting it off. Same-or-higher priority always shows (so a second
+   * important notice, or the same tier, still gets through as before).
+   */
+  showNotice(text: string, ms = 2600, priority: NoticePriority = 2): void {
+    const now = performance.now();
+    if (now < this.noticeGuardUntil && priority > this.noticePriority) return;
+
+    this.noticePriority = priority;
+    this.noticeGuardUntil = now + ms;
+
     this.noticeEl.textContent = text;
     this.noticeEl.hidden = false;
     // Force reflow so the fade-in transition restarts even on a rapid re-show.
@@ -324,6 +367,29 @@ export class HUD {
     this.opOnTimeEl.textContent = `${o.onTimeRate}%`;
     this.opReputationEl.textContent = String(o.reputation);
     this.opGroundEl.textContent = String(o.groundEfficiency);
+  }
+
+  /**
+   * Render the "현재 운항" Flight Status Board (V1.7 §19-20) — flights that
+   * have not finished yet. Sits above Recent Flights, which is untouched and
+   * still shows only completed ones. Hidden while nothing is currently flying.
+   */
+  setActiveFlights(entries: ActiveFlightEntry[]): void {
+    if (entries.length === 0) {
+      this.activeFlightsEl.hidden = true;
+      return;
+    }
+    this.activeFlightsEl.hidden = false;
+    this.activeFlightsListEl.innerHTML = entries
+      .map(
+        (e) =>
+          `<div class="flight-row">` +
+          `<span class="fr-id">${escapeHtml(e.id)}</span>` +
+          `<span class="fr-route">${escapeHtml(e.route)}</span>` +
+          `<span class="fr-status">${escapeHtml(e.statusText)}</span>` +
+          `</div>`,
+      )
+      .join("");
   }
 
   /**
@@ -531,6 +597,10 @@ function buildTemplate(): string {
     <div class="hud-panel event-panel js-events" hidden>
       <div class="stat-panel-title">${t("operationalEvent")}</div>
       <div class="event-list js-events-list"></div>
+    </div>
+    <div class="hud-panel flight-history js-active-flights" hidden>
+      <div class="stat-panel-title">${t("activeFlights")}</div>
+      <div class="flight-history-list js-active-flights-list"></div>
     </div>
     <div class="hud-panel flight-history js-flight-history" hidden>
       <div class="stat-panel-title">${t("recentFlights")}</div>

@@ -257,6 +257,12 @@ body {
   font-weight: 800;
 }
 
+.flight-row .fr-status {
+  opacity: 0.85;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------- ground operations --- */
 
 .ground-ops {

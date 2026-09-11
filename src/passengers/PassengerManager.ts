@@ -22,7 +22,9 @@ import {
  * only observe its state.
  */
 
-const AIRBORNE: ReadonlySet<AircraftState> = new Set([
+/** Exported for FlightScheduler (V1.7) — the same "in the air, not at a gate
+ * yet" test used for the one-shot arrival-notice detection. */
+export const AIRBORNE: ReadonlySet<AircraftState> = new Set([
   "TAXIING",
   "TAKEOFF",
   "FLYING",

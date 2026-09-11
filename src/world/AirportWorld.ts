@@ -3,6 +3,7 @@ import type { GameState, BuildingData } from "../core/GameState";
 import { Ground } from "./Ground";
 import { Grid } from "./Grid";
 import { ServiceRoad } from "./ServiceRoad";
+import { Taxiway } from "./Taxiway";
 import { AirportProps } from "./AirportProps";
 import { disposePaletteCache } from "./materials";
 import { Building } from "../buildings/Building";
@@ -23,6 +24,7 @@ export class AirportWorld {
   private readonly ground: Ground;
   private readonly grid: Grid;
   private readonly serviceRoad: ServiceRoad;
+  private readonly taxiway: Taxiway;
   private readonly props: AirportProps;
   private readonly buildings: Building[] = [];
 
@@ -39,6 +41,9 @@ export class AirportWorld {
     this.serviceRoad = new ServiceRoad();
     this.group.add(this.serviceRoad.object);
 
+    this.taxiway = new Taxiway();
+    this.group.add(this.taxiway.object);
+
     this.props = new AirportProps();
     this.group.add(this.props.object);
 
@@ -53,6 +58,11 @@ export class AirportWorld {
   /** Buildings exposed for selection. */
   get selectables(): Building[] {
     return this.buildings;
+  }
+
+  /** Look up a placed building's mesh instance by its BuildingData id (V1.7). */
+  getBuildingObject(id: string): Building | undefined {
+    return this.buildings.find((b) => b.id === id);
   }
 
   /**
@@ -79,6 +89,7 @@ export class AirportWorld {
     for (const b of this.buildings) b.dispose();
     this.buildings.length = 0;
     this.serviceRoad.dispose();
+    this.taxiway.dispose();
     this.props.dispose();
     this.grid.dispose();
     this.ground.dispose();

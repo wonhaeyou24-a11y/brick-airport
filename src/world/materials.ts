@@ -60,6 +60,9 @@ export const COLORS = {
   vehicleCab: 0x2b2d42,
   serviceRoad: 0x6b7079,
   staffArea: 0x8a949c,
+  // Taxiway (V1.7 §7) — sits between the runway and the apron/service lanes.
+  taxiway: 0x585c64,
+  taxiwayMarking: 0xf6c945,
 } as const;
 
 export function disposePaletteCache(): void {

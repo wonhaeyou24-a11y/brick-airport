@@ -18,6 +18,7 @@ import {
   type FlightSnapshot,
 } from "./FlightLifecycle";
 import { isFlightOnTime } from "../operations/AirportOperations";
+import { AIRBORNE } from "../passengers/PassengerManager";
 
 /**
  * FlightScheduler — keeps the airport alive by requesting new arrivals over
@@ -49,6 +50,15 @@ export interface FlightSchedulerHooks {
   spawnAircraft(data: AircraftData): void;
   /** Fired once, the frame a flight reaches COMPLETED (V0.7 operations hook). */
   onFlightCompleted?(flight: FlightData): void;
+  /** Fired once, the frame its aircraft first reaches TAKEOFF (V1.7 live-ops notice). */
+  onAircraftTakeoff?(flight: FlightData): void;
+  /**
+   * Fired once, the frame an aircraft goes from airborne to PARKED at a gate
+   * (V1.7). Takes the aircraft, not a flight: every FlightData created by this
+   * scheduler is a DEPARTURE (spec's own routeType), so the flight tied to a
+   * just-landed aircraft is really its *next* departure, not one that "arrived".
+   */
+  onAircraftArrived?(aircraft: AircraftData): void;
 }
 
 export class FlightScheduler {
@@ -236,12 +246,25 @@ export class FlightScheduler {
     }
   }
 
+  /**
+   * Same prevState sweep as before (spec §52/§53 one-shot pattern), extended
+   * to also fire the V1.7 takeoff/arrival live-ops notices — still exactly one
+   * GameState write (recordFlightDeparture) and no new bookkeeping beyond the
+   * prevState map that already existed for departure counting.
+   */
   private countDepartures(): void {
     for (const ac of this.state.data.aircraft) {
       const prev = this.prevState.get(ac.id);
+      const flight = ac.currentFlightId
+        ? this.state.getFlight(ac.currentFlightId)
+        : undefined;
+
       if (prev !== undefined && prev !== "TAKEOFF" && ac.state === "TAKEOFF") {
         this.state.recordFlightDeparture();
         if (ac.currentFlightId) this.departed.add(ac.currentFlightId);
+        if (flight) this.hooks.onAircraftTakeoff?.(flight);
+      } else if (prev !== undefined && AIRBORNE.has(prev) && ac.state === "PARKED") {
+        this.hooks.onAircraftArrived?.(ac);
       }
       this.prevState.set(ac.id, ac.state);
     }

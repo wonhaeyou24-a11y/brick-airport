@@ -77,7 +77,8 @@ import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
 import type { StaffRole } from "./GameState";
-import { HUD, type SelectionInfo } from "../ui/HUD";
+import { HUD, type SelectionInfo, type ActiveFlightEntry } from "../ui/HUD";
+import { Gate } from "../buildings/Gate";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
 
 /**
@@ -172,6 +173,10 @@ export class Game {
   private gridVisibleBeforeBuild: boolean | null = null;
   /** Signature of the "다음 목표" growth-goal panel (V1.6). */
   private shownGrowthGoalSig = "";
+  /** Signature of the "현재 운항" Flight Status Board (V1.7). */
+  private shownActiveFlightsSig = "";
+  /** Signature of the per-gate status beacon colors (V1.7 §8). */
+  private shownGateVisualsSig = "";
   /** Signature of the Missions panel (V1.0-E). */
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
@@ -270,6 +275,15 @@ export class Game {
       onFlightCompleted: (flight) => {
         this.operations.handleFlightCompleted(flight);
         this.requestEventSave();
+      },
+      // V1.7 §17/§23 — one-shot "important" notices for the departure/arrival
+      // moments of the turnaround loop, priority 1 so a busy ground-ops toast
+      // never swallows them.
+      onAircraftTakeoff: (flight) => {
+        this.hud.showNotice(`✈ ${flight.id} 이륙 · ${flightRoute(flight)}`, 2400, 1);
+      },
+      onAircraftArrived: (aircraft) => {
+        this.hud.showNotice(`✈ ${aircraft.type} 항공기 도착`, 2400, 1);
       },
     });
 
@@ -377,7 +391,7 @@ export class Game {
     this.saveStatus = result.ok ? "SAVED" : "ERROR";
     this.hud.setSaveStatus(this.saveStatus);
     this.secondsSinceSave = 0;
-    if (!result.ok) this.hud.showNotice("저장 실패 — 이전 저장 유지됨");
+    if (!result.ok) this.hud.showNotice("저장 실패 — 이전 저장 유지됨", 2600, 1);
     return result.ok;
   }
 
@@ -415,7 +429,7 @@ export class Game {
    */
   requestLoad(): void {
     if (!this.saveManager.hasSave()) {
-      this.hud.showNotice("불러올 저장 데이터가 없습니다.");
+      this.hud.showNotice("불러올 저장 데이터가 없습니다.", 2600, 1);
       return;
     }
     if (!window.confirm("마지막 저장을 불러올까요? 저장하지 않은 진행 상황은 사라집니다.")) {
@@ -509,6 +523,7 @@ export class Game {
       this.hud.showNotice(
         benefit ? `${name} 건설 완료\n${benefit}` : `${name} 건설 완료`,
         2200,
+        3,
       );
       this.requestEventSave(); // a free console placeBuilding() doesn't count
     }
@@ -541,7 +556,7 @@ export class Game {
       this.state.airport.level,
     );
     if (!purchase.ok && purchase.reason === "LOCKED") {
-      this.hud.showNotice(`공항 레벨 ${purchase.requiredLevel} 이상 필요`);
+      this.hud.showNotice(`공항 레벨 ${purchase.requiredLevel} 이상 필요`, 2600, 1);
       return;
     }
     this.buildController.begin(type);
@@ -553,6 +568,8 @@ export class Game {
       purchase.reason === "LOCKED"
         ? `공항 레벨 ${purchase.requiredLevel} 이상 필요`
         : "잔액이 부족합니다",
+      2600,
+      1,
     );
   }
 
@@ -579,13 +596,15 @@ export class Game {
           : result.reason === "MAX_LEVEL"
             ? "이미 최대로 확장되었습니다"
             : "잔액이 부족합니다",
+        2600,
+        1,
       );
       return false;
     }
     const fromTier = expansionTier(level);
     const tier = expansionTier(level + 1);
     if (!this.state.spendMoney(tier.cost)) {
-      this.hud.showNotice("잔액이 부족합니다");
+      this.hud.showNotice("잔액이 부족합니다", 2600, 1);
       return false;
     }
     this.hud.showSpend(tier.cost);
@@ -598,6 +617,7 @@ export class Game {
     this.hud.showNotice(
       `공항 확장 완료!\n${fromTier.worldSize}×${fromTier.worldSize} → ${tier.worldSize}×${tier.worldSize}`,
       3200,
+      1,
     );
     this.requestEventSave();
     return true;
@@ -641,7 +661,7 @@ export class Game {
   hireStaff(role: StaffRole): boolean {
     const cfg = staffRoleConfig(role);
     if (!this.state.spendMoney(cfg.hiringCost)) {
-      this.hud.showNotice("Not enough money");
+      this.hud.showNotice("Not enough money", 2600, 1);
       return false;
     }
     this.hud.showSpend(cfg.hiringCost);
@@ -675,7 +695,7 @@ export class Game {
       speed: STAFF_CONFIG.speed,
     });
     this.refreshHudStats();
-    this.hud.showNotice(`${name} 채용됨 · ${staffRoleLabel(role)}`);
+    this.hud.showNotice(`${name} 채용됨 · ${staffRoleLabel(role)}`, 2600, 3);
     return true;
   }
 
@@ -1110,19 +1130,19 @@ export class Game {
 
     // Operations: tick events, surface notices, honour surge flight requests.
     const opsTick = this.operations.update(deltaTime);
-    for (const notice of opsTick.notices) this.hud.showNotice(notice);
+    for (const notice of opsTick.notices) this.hud.showNotice(notice, 2600, 3);
     for (let i = 0; i < opsTick.extraFlightRequests; i += 1) {
       this.flightScheduler.requestFlight();
     }
 
     // Missions: keep the objective queue filled, track progress, pay rewards.
     const missionTick = this.missions.update(deltaTime);
-    for (const notice of missionTick.notices) this.hud.showNotice(notice);
+    for (const notice of missionTick.notices) this.hud.showNotice(notice, 2600, 1);
     if (missionTick.notices.length > 0) this.requestEventSave();
 
     // Operational events: raise/track/resolve the short operating prompts.
     const eventTick = this.operationalEvents.update(deltaTime);
-    for (const notice of eventTick.notices) this.hud.showNotice(notice);
+    for (const notice of eventTick.notices) this.hud.showNotice(notice, 2600, 1);
 
     // Facility effects: recompute only when the building list actually
     // changed (signature-gated inside FacilityManager itself).
@@ -1137,8 +1157,10 @@ export class Game {
     this.refreshStatistics();
     this.refreshOperations();
     this.refreshAirportStatus();
+    this.refreshActiveFlights();
     this.refreshFlightHistory();
     this.refreshGroundOps();
+    this.refreshGateVisuals();
     this.refreshGrowthGoal();
     this.refreshMissions();
     this.refreshEvents();
@@ -1254,6 +1276,23 @@ export class Game {
   }
 
   /**
+   * Gate status beacon colors (V1.7 §8) — a read-only recolor of each Gate
+   * mesh's existing status light from live GateData.status. Mesh does not own
+   * the state (spec §2); this only pushes it to the beacon each frame the
+   * per-gate status signature changes.
+   */
+  private refreshGateVisuals(): void {
+    const sig = this.state.data.gates.map((g) => g.status).join(",");
+    if (sig === this.shownGateVisualsSig) return;
+    this.shownGateVisualsSig = sig;
+
+    for (const gate of this.state.data.gates) {
+      const obj = this.world.getBuildingObject(gate.buildingId);
+      if (obj instanceof Gate) obj.setStatusLight(gate.status);
+    }
+  }
+
+  /**
    * Ground Operations panel (V0.8-E) — the task being worked for each active
    * turnaround plus the most recent completions. DOM only touched on change.
    */
@@ -1328,6 +1367,29 @@ export class Game {
   }
 
   /**
+   * "현재 운항" Flight Status Board (V1.7 §19-20) — flights still in progress
+   * (not COMPLETED/CANCELLED), oldest first. A sibling panel above Recent
+   * Flights, built from the same FlightData; no new flight data structure.
+   */
+  private refreshActiveFlights(): void {
+    const active = this.state.data.flights
+      .filter((f) => !isFlightOver(f.state))
+      .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+      .slice(0, 5);
+
+    const sig = active.map((f) => `${f.id}:${f.state}`).join(",");
+    if (sig === this.shownActiveFlightsSig) return;
+    this.shownActiveFlightsSig = sig;
+
+    const entries: ActiveFlightEntry[] = active.map((f) => ({
+      id: f.id,
+      route: flightRoute(f),
+      statusText: `${stateLabel(f.state)}${f.delayed ? " ⚠" : ""}`,
+    }));
+    this.hud.setActiveFlights(entries);
+  }
+
+  /**
    * Recent Flights panel (V0.6-E) — the last few COMPLETED flights, newest
    * first. A separate panel from Airport Statistics; never replaces it. DOM is
    * only touched when the signature changes (perf §31).
@@ -1372,7 +1434,7 @@ export class Game {
     if (target <= a.level) return; // only ever rises; write only on change
     const previousLevel = a.level;
     a.level = target;
-    this.hud.showNotice(this.levelUpMessage(previousLevel, target), 3600);
+    this.hud.showNotice(this.levelUpMessage(previousLevel, target), 3600, 1);
     this.refreshHudStats();
     this.requestEventSave();
   }

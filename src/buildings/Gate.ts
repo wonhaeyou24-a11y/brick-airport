@@ -1,8 +1,22 @@
 import * as THREE from "three";
+import type { GateStatus } from "../core/GameState";
 import { Building } from "./Building";
 import { brickMaterial, COLORS } from "../world/materials";
 import { createSignPost, createStud } from "../assets/AssetFactory";
 import { t } from "../i18n/strings";
+
+/**
+ * Status-light color per GateStatus (V1.7 §8) — read fresh from GateData each
+ * frame by Game's refreshGateVisuals(); this mesh never stores or decides the
+ * status itself (spec §2's data-first rule).
+ */
+const STATUS_LIGHT_COLOR: Record<GateStatus, number> = {
+  AVAILABLE: 0x8fd3a8, // soft green — free and ready to receive
+  OCCUPIED: 0xf6d02f, // legacy value; treated like BOARDING
+  BOARDING: 0xf6d02f, // amber — turnaround under way
+  READY: 0x3ec95c, // bright green — cleared for pushback
+  DEPARTING: 0x4aa8ff, // blue — pushing back / taxiing out
+};
 
 /**
  * Gate — brick-toy aircraft stand (V1.3-B upgrade of the V0.1 placeholder):
@@ -13,6 +27,13 @@ import { t } from "../i18n/strings";
  * only reads the building id once, at construction, to paint a static gate
  * number; it never reads or stores live operational state (spec §10).
  */
+/** Object name of the status beacon mesh, looked up via the scene graph
+ * rather than a class field — Building's constructor calls build() before
+ * Gate's own field initializers run (`useDefineForClassFields`), so a field
+ * assigned inside build() would be clobbered back to its initial value the
+ * moment construction finished. */
+const STATUS_BEACON_NAME = "gate-status-beacon";
+
 export class Gate extends Building {
   protected build(group: THREE.Group): void {
     // Gate pad
@@ -73,6 +94,30 @@ export class Gate extends Building {
     );
     post.position.set(0.8, 0.8, 0.8);
     group.add(post);
+
+    // Status beacon (V1.7 §8) — on top of the marker post, recolored each
+    // frame from live GateData.status by Game.refreshGateVisuals(). Starts
+    // at the AVAILABLE color; this class never reads GameState itself.
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 10, 8),
+      brickMaterial(STATUS_LIGHT_COLOR.AVAILABLE, { roughness: 0.3 }).clone(),
+    );
+    beacon.name = STATUS_BEACON_NAME;
+    beacon.position.set(0.8, 1.75, 0.8);
+    group.add(beacon);
+  }
+
+  /** Read-only recolor of the status beacon; never touches GateData. */
+  setStatusLight(status: GateStatus): void {
+    const beacon = this.object.getObjectByName(STATUS_BEACON_NAME) as
+      | THREE.Mesh
+      | undefined;
+    const mat = beacon?.material as THREE.MeshStandardMaterial | undefined;
+    if (!mat) return;
+    const color = STATUS_LIGHT_COLOR[status] ?? STATUS_LIGHT_COLOR.AVAILABLE;
+    mat.color.setHex(color);
+    mat.emissive.setHex(color);
+    mat.emissiveIntensity = 0.9;
   }
 
   getSelectionLabel(): string {
