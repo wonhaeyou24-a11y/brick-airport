@@ -4,6 +4,7 @@ import {
   makeBuilding,
   isFlightOver,
   isServiceFacility,
+  isGroundOperationOver,
 } from "./GameState";
 import type {
   BuildingData,
@@ -58,6 +59,7 @@ import {
   TURNAROUND_SEQUENCE,
   operationGlyph,
 } from "../operations/GroundOperation";
+import { roleForOperation } from "../staff/StaffConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
@@ -77,7 +79,7 @@ import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
 import type { StaffRole } from "./GameState";
-import { HUD, type SelectionInfo, type ActiveFlightEntry } from "../ui/HUD";
+import { HUD, type SelectionInfo, type ActiveFlightEntry, type ActionItem } from "../ui/HUD";
 import { Gate } from "../buildings/Gate";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
 
@@ -177,6 +179,8 @@ export class Game {
   private shownActiveFlightsSig = "";
   /** Signature of the per-gate status beacon colors (V1.7 §8). */
   private shownGateVisualsSig = "";
+  /** Signature of the "확인 필요" Action Center (V1.8 §8). */
+  private shownActionCenterSig = "";
   /** Signature of the Missions panel (V1.0-E). */
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
@@ -328,6 +332,7 @@ export class Game {
         this.world.setGridVisible(!this.world.isGridVisible()),
       onSave: () => this.save(),
       onLoad: () => this.requestLoad(),
+      onActionClick: (item) => this.onActionClick(item),
     });
     this.refreshHudStats();
     this.refreshStatistics();
@@ -342,6 +347,7 @@ export class Game {
         onSelectType: (type) => this.onBuildTypeSelected(type),
         onCancel: () => this.buildController.cancel(),
         onExpand: () => this.expandAirport(),
+        onHireStaff: (role) => this.hireStaff(role),
       },
     );
     this.refreshBuildMenu();
@@ -1161,6 +1167,7 @@ export class Game {
     this.refreshFlightHistory();
     this.refreshGroundOps();
     this.refreshGateVisuals();
+    this.refreshActionCenter();
     this.refreshGrowthGoal();
     this.refreshMissions();
     this.refreshEvents();
@@ -1228,13 +1235,30 @@ export class Game {
   }
 
   /**
-   * Airport-wide status indicator (V1.5 §6) — a one-line read of existing
-   * GroundOperation / Staff / Flight / Event state, in priority order.
-   * Computed fresh every check; nothing here is a new persisted value.
+   * Airport-wide status indicator (V1.5 §6, extended to 4 tiers V1.8 §6-7) —
+   * a one-line read of existing GroundOperation / Staff / Flight / Event
+   * state, in priority order. Computed fresh every check; nothing here is a
+   * new persisted value.
+   *
+   * CRITICAL is new in V1.8: a real, already-flagged stuck operation
+   * (`op.delayed`, set by GroundOperationManager once a task has waited past
+   * its own delay threshold) — "실제 운영이 막힌 경우", not a guess. ATTENTION
+   * is also new: a softer precursor below the existing WARNING thresholds, so
+   * the health badge does not jump straight from "정상" to a hard warning.
    */
-  private computeAirportStatus(): { label: string; tone: "good" | "warn" | "alert" } {
+  private computeAirportStatus(): {
+    label: string;
+    tone: "good" | "attention" | "warn" | "critical";
+  } {
+    const stuckOperation = this.state.data.groundOperations.some(
+      (o) => o.delayed && !isGroundOperationOver(o.state),
+    );
+    if (stuckOperation) {
+      return { label: t("statusCritical"), tone: "critical" };
+    }
+
     if (this.state.data.operationalEvents.some((e) => e.state === "ACTIVE")) {
-      return { label: t("statusEvent"), tone: "alert" };
+      return { label: t("statusEvent"), tone: "warn" };
     }
 
     const staffNeeded = this.state.data.groundOperations.some(
@@ -1262,6 +1286,15 @@ export class Game {
     const capacity = this.facilities.getFacilityEffects().passengerCapacity;
     if (capacity > 0 && this.state.data.passengers.length > capacity * 0.9) {
       return { label: t("statusCongested"), tone: "warn" };
+    }
+
+    // ATTENTION — a milder version of the checks above, before they become a
+    // genuine WARNING (spec §7's own "불필요하게 압박하지 않는다" instruction:
+    // this only fires on a real, if small, backlog — never fabricated).
+    const anyPending = this.state.data.groundOperations.some((o) => o.state === "PENDING");
+    const nearCongested = capacity > 0 && this.state.data.passengers.length > capacity * 0.7;
+    if (anyPending || nearCongested) {
+      return { label: t("statusAttention"), tone: "attention" };
     }
 
     return { label: t("statusNormal"), tone: "good" };
@@ -1330,7 +1363,15 @@ export class Game {
     const satisfaction = Math.round(o.passengerSatisfaction);
     const onTimeRate = Math.round(o.onTimeRate);
     const groundEfficiency = Math.round(o.groundEfficiency ?? 70);
-    const sig = `${serviceScore}|${satisfaction}|${onTimeRate}|${groundEfficiency}|${reputation}`;
+    // "Airport Management Summary" current-state fields (V1.8 §4) — computed
+    // fresh from existing data, not new stored stats.
+    const availableGates = this.state.data.gates.filter(
+      (g) => g.status === "AVAILABLE",
+    ).length;
+    const activeOperations = this.state.data.groundOperations.filter(
+      (op) => !isGroundOperationOver(op.state),
+    ).length;
+    const sig = `${serviceScore}|${satisfaction}|${onTimeRate}|${groundEfficiency}|${reputation}|${availableGates}|${activeOperations}`;
     if (sig === this.shownOperationsSig) return;
     this.shownOperationsSig = sig;
     this.hud.setOperations({
@@ -1339,6 +1380,8 @@ export class Game {
       onTimeRate,
       reputation,
       groundEfficiency,
+      availableGates,
+      activeOperations,
     });
   }
 
@@ -1492,6 +1535,142 @@ export class Game {
       flights: { current: Math.min(flights, nextReq.minFlights), target: nextReq.minFlights },
       passengers: { current: Math.min(passengers, nextReq.minPassengers), target: nextReq.minPassengers },
     });
+  }
+
+  /**
+   * "확인 필요" Action Center (V1.8 §8-9) — a short, priority-ordered list of
+   * REAL conditions read from existing GameState/managers. Never fabricates a
+   * recommendation (§28): every branch below only fires when the same signal
+   * a player could already see elsewhere (airport status, gate beacons,
+   * ground-ops panel) is genuinely true. Capped so it stays a quick scan, not
+   * a second Statistics panel (spec's own "화면이 지나치게 시끄러워지지
+   * 않도록" concern, restated for management UI at §8/§31).
+   */
+  private computeActionItems(): ActionItem[] {
+    const items: ActionItem[] = [];
+    const a = this.state.airport;
+
+    // Priority 1 — real operating problems.
+    const stuckOps = this.state.data.groundOperations.filter(
+      (o) => o.delayed && !isGroundOperationOver(o.state),
+    );
+    const stuckAircraftSeen = new Set<string>();
+    for (const op of stuckOps) {
+      if (stuckAircraftSeen.has(op.aircraftId)) continue; // one row per aircraft
+      stuckAircraftSeen.add(op.aircraftId);
+      items.push({
+        icon: "⚠",
+        text: `${opLabel(op.type)} 대기`,
+        detail: "작업이 지연되고 있습니다.",
+        priority: 1,
+        kind: "AIRCRAFT",
+        targetId: op.aircraftId,
+      });
+    }
+
+    for (const role of STAFF_CONFIG.ROLES) {
+      const needed = this.state.data.groundOperations.filter(
+        (o) => o.state === "PENDING" && !o.staffId && roleForOperation(o.type) === role,
+      ).length;
+      if (needed === 0) continue;
+      const available = this.state
+        .getStaffByRole(role)
+        .filter((s) => s.state === "IDLE").length;
+      if (available >= needed) continue;
+      items.push({
+        icon: "⚠",
+        text: `${staffRoleLabel(role)} 부족`,
+        detail: `필요 ${needed} · 사용 가능 ${available}`,
+        priority: 1,
+        kind: "STAFF",
+      });
+    }
+
+    const allGatesBusy =
+      this.state.data.gates.length > 0 &&
+      this.state.data.gates.every((g) => g.status !== "AVAILABLE");
+    const flightsWaiting = this.state.data.flights.some((f) => f.state === "SCHEDULED");
+    if (allGatesBusy && flightsWaiting) {
+      items.push({
+        icon: "⚠",
+        text: "Gate 부족",
+        detail: "추가 Gate를 건설할 수 있습니다.",
+        priority: 1,
+        kind: "BUILD_GATE",
+      });
+    }
+
+    // Priority 2 — growth opportunities, only when genuinely close/available.
+    const nextReq = LEVEL_REQUIREMENTS.find((r) => r.level === a.level + 1);
+    if (nextReq) {
+      const flightsLeft = Math.max(0, nextReq.minFlights - (a.totalFlights ?? 0));
+      const paxLeft = Math.max(0, nextReq.minPassengers - (a.totalPassengers ?? 0));
+      const nearFlights = flightsLeft > 0 && flightsLeft <= Math.ceil(nextReq.minFlights * 0.3);
+      const nearPax = paxLeft > 0 && paxLeft <= Math.ceil(nextReq.minPassengers * 0.3);
+      if (nearFlights || nearPax) {
+        const detail =
+          flightsLeft <= paxLeft || !nearPax ? `항공편 +${flightsLeft}` : `승객 +${paxLeft}`;
+        items.push({
+          icon: "↑",
+          text: `다음 Level까지`,
+          detail,
+          priority: 2,
+          kind: "INFO",
+        });
+      }
+    }
+
+    const expCheck = checkExpansion(a.expansionLevel ?? 0, a.level, a.money);
+    if (expCheck.ok) {
+      const tier = expansionTier((a.expansionLevel ?? 0) + 1);
+      items.push({
+        icon: "＋",
+        text: "공항 확장 가능",
+        detail: `${tier.worldSize}×${tier.worldSize} · ${formatMoney(tier.cost)}`,
+        priority: 2,
+        kind: "EXPAND",
+      });
+    }
+
+    // Priority 3 — general information.
+    const activeEvent = this.state.data.operationalEvents.find((e) => e.state === "ACTIVE");
+    if (activeEvent) {
+      items.push({
+        icon: "ℹ",
+        text: activeEvent.title,
+        detail: activeEvent.description,
+        priority: 3,
+        kind: "INFO",
+      });
+    }
+
+    items.sort((x, y) => x.priority - y.priority);
+    return items.slice(0, 6);
+  }
+
+  private refreshActionCenter(): void {
+    const items = this.computeActionItems();
+    const sig = items
+      .map((i) => `${i.priority}:${i.kind}:${i.text}:${i.detail ?? ""}`)
+      .join(",");
+    if (sig === this.shownActionCenterSig) return;
+    this.shownActionCenterSig = sig;
+    this.hud.setActionItems(items);
+  }
+
+  /**
+   * Route an Action Center click to the related UI (spec §10) — it only
+   * navigates attention, it never performs the action itself (§11).
+   */
+  private onActionClick(item: ActionItem): void {
+    if (item.kind === "AIRCRAFT" && item.targetId) {
+      const craft = this.aircraftManager.getById(item.targetId);
+      if (craft) this.selection.select(craft);
+      return;
+    }
+    if (item.kind === "BUILD_GATE" || item.kind === "STAFF" || item.kind === "EXPAND") {
+      this.buildMenu.openMenu();
+    }
   }
 
   /** Push cost / lock state to the BuildMenu when level or money changes. */

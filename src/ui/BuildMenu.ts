@@ -1,6 +1,7 @@
-import type { BuildingType } from "../core/GameState";
+import type { BuildingType, StaffRole } from "../core/GameState";
 import type { BuildModeState } from "../construction/BuildController";
 import { formatMoney, t } from "../i18n/strings";
+import { STAFF_CONFIG, staffRoleConfig, staffRoleLabel } from "../staff/StaffConfig";
 
 /**
  * BuildMenu — brick-style side panel for build mode.
@@ -17,6 +18,10 @@ export interface BuildMenuCallbacks {
   onCancel(): void;
   /** V1.2-E. */
   onExpand(): void;
+  /** V1.8 §17 — hire another staff member of this role. Costs are static
+   * (StaffConfig, not level-gated) so unlike building buttons this list
+   * never needs a runtime availability refresh. */
+  onHireStaff(role: StaffRole): void;
 }
 
 /** V1.2-E — the airport-expansion card shown under the building list. */
@@ -81,10 +86,22 @@ export class BuildMenu {
     this.expandBtn = this.must(".js-expand-btn");
     this.expandBtn.addEventListener("click", () => callbacks.onExpand());
 
+    for (const role of STAFF_CONFIG.ROLES) {
+      this.must<HTMLButtonElement>(`.js-hire-${role}`).addEventListener("click", () =>
+        callbacks.onHireStaff(role),
+      );
+    }
+
     this.toggle.addEventListener("click", () => this.setOpen(!this.open));
     this.cancelBtn.addEventListener("click", () => callbacks.onCancel());
 
     this.setOpen(false);
+  }
+
+  /** Open the panel from outside (V1.8 §10 — Action Center "navigate to
+   * related UI", never auto-performs the build/hire itself). */
+  openMenu(): void {
+    this.setOpen(true);
   }
 
   /** Update the airport-expansion card (spec §E.5/§E.6). */
@@ -151,6 +168,17 @@ function template(types: readonly BuildMenuType[]): string {
     )
     .join("");
 
+  // Staff-hire section (V1.8 §17) — costs are static per role, so they can be
+  // baked in directly instead of needing a setAvailability-style refresh.
+  const hireButtons = STAFF_CONFIG.ROLES.map((role) => {
+    const cfg = staffRoleConfig(role);
+    return /* html */ `
+    <button class="brick-btn build-type js-hire-${role}">
+      <span class="build-label">${staffRoleLabel(role)}</span>
+      <span class="build-cost">${formatMoney(cfg.hiringCost)}</span>
+    </button>`;
+  }).join("");
+
   return /* html */ `
   <button class="brick-btn build-toggle js-build-toggle" title="${t("build")}">${t("build")}</button>
   <div class="build-list js-build-list" hidden>
@@ -160,6 +188,8 @@ function template(types: readonly BuildMenuType[]): string {
       <div class="expansion-body js-expansion-body"></div>
       <button class="brick-btn expand-btn js-expand-btn">${t("expand")}</button>
     </div>
+    <div class="stat-panel-title staff-hire-title">${t("staffHire")}</div>
+    ${hireButtons}
     <button class="brick-btn build-cancel js-build-cancel" hidden>${t("cancel")}</button>
   </div>
 `;

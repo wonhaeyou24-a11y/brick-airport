@@ -121,11 +121,15 @@ body {
   color: var(--brick-green);
 }
 
+.airport-status.tone-attention {
+  color: var(--brick-yellow);
+}
+
 .airport-status.tone-warn {
   color: #c17a00;
 }
 
-.airport-status.tone-alert {
+.airport-status.tone-critical {
   color: var(--brick-red);
 }
 
@@ -261,6 +265,74 @@ body {
   opacity: 0.85;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* --------------------------------------------------- action center --- */
+
+.action-center {
+  max-width: 340px;
+  font-size: 12px;
+}
+
+.action-center-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.action-center-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 8px;
+}
+
+.action-row.ac-clickable {
+  cursor: pointer;
+}
+
+.action-row.ac-clickable:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.ac-icon {
+  flex: none;
+  font-weight: 800;
+  width: 14px;
+  text-align: center;
+}
+
+.ac-p1 .ac-icon {
+  color: var(--brick-red);
+}
+
+.ac-p2 .ac-icon {
+  color: var(--brick-blue);
+}
+
+.ac-p3 .ac-icon {
+  color: var(--brick-green);
+}
+
+.ac-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ac-text {
+  font-weight: 800;
+}
+
+.ac-detail {
+  opacity: 0.7;
+  font-size: 11px;
 }
 
 /* ------------------------------------------------- ground operations --- */
@@ -618,6 +690,10 @@ body {
 
 .build-type.is-locked .build-cost {
   opacity: 0.9;
+}
+
+.staff-hire-title {
+  margin-top: 4px;
 }
 
 .build-cancel {

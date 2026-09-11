@@ -105,13 +105,21 @@ const DICT: Record<string, Record<Locale, string>> = {
   saved: { ko: "저장됨", en: "SAVED" },
   saveError: { ko: "저장 오류", en: "SAVE ERROR" },
 
-  // Airport status indicator (V1.5 §6)
+  // Airport status indicator (V1.5 §6, extended V1.8 §6-7)
   statusNormal: { ko: "정상 운영", en: "Normal Operations" },
   statusCongested: { ko: "혼잡", en: "Congested" },
   statusGroundDelay: { ko: "지상조업 지연", en: "Ground Delay" },
   statusStaffShortage: { ko: "직원 부족", en: "Staff Shortage" },
   statusFlightBacklog: { ko: "항공편 대기", en: "Flights Waiting" },
   statusEvent: { ko: "이벤트 발생", en: "Event Active" },
+  statusAttention: { ko: "운영 주의", en: "Attention" },
+  statusCritical: { ko: "운영 문제", en: "Operations Blocked" },
+
+  // Action Center (V1.8 §8) + new Operations-grid summary cards (§4)
+  actionCenter: { ko: "확인 필요", en: "Action Center" },
+  opAvailableGates: { ko: "게이트 여유", en: "Gates Free" },
+  opActiveOperations: { ko: "진행 작업", en: "Active Ops" },
+  staffHire: { ko: "직원 채용", en: "Hire Staff" },
 };
 
 export function t(key: keyof typeof DICT, locale: Locale = CURRENT_LOCALE): string {

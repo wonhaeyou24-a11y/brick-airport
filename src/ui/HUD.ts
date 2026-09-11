@@ -133,15 +133,39 @@ export interface OperationsInfo {
   reputation: number;
   /** Ground operation efficiency 0–100 (V0.8-D). */
   groundEfficiency: number;
+  /** Gates currently AVAILABLE — "Airport Management Summary" (V1.8 §4). */
+  availableGates: number;
+  /** Ground operations not yet COMPLETED/CANCELLED (V1.8 §4). */
+  activeOperations: number;
 }
 
-/** Airport-wide operating status at a glance (V1.5 §6) — computed by Game
- *  from existing GroundOperation/Staff/Flight/Event state, never a new
- *  persisted value. */
+/** Airport-wide operating status at a glance (V1.5 §6, extended V1.8 §6-7) —
+ *  computed by Game from existing GroundOperation/Staff/Flight/Event state,
+ *  never a new persisted value. Four tiers: "good" (NORMAL), "attention"
+ *  (ATTENTION — a soft precursor signal), "warn" (WARNING — a real shortage
+ *  or backlog), "critical" (CRITICAL — an operation is genuinely stuck). */
 export interface AirportStatusInfo {
   label: string;
-  /** "good" = normal, "warn" = something needs attention, "alert" = an event is active. */
-  tone: "good" | "warn" | "alert";
+  tone: "good" | "attention" | "warn" | "critical";
+}
+
+/**
+ * One row of the "확인 필요" Action Center (V1.8 §8-11) — a real, currently
+ * true condition read from existing GameState, never a fabricated one (§28).
+ * Priority 1 = an actual operating problem, 2 = a growth opportunity worth
+ * mentioning, 3 = general information. Clicking a row with a `kind` other
+ * than "INFO" navigates to the related UI (§10) — it never performs the
+ * action itself (§11's "no automatic player action").
+ */
+export type ActionKind = "AIRCRAFT" | "BUILD_GATE" | "STAFF" | "EXPAND" | "INFO";
+export interface ActionItem {
+  icon: string;
+  text: string;
+  detail?: string;
+  priority: 1 | 2 | 3;
+  kind: ActionKind;
+  /** Aircraft id to focus, only meaningful when kind === "AIRCRAFT". */
+  targetId?: string;
 }
 
 export interface HudCallbacks {
@@ -152,6 +176,8 @@ export interface HudCallbacks {
   /** V1.2-E. */
   onSave(): void;
   onLoad(): void;
+  /** V1.8 §10 — navigate to whatever an Action Center row points at. */
+  onActionClick(item: ActionItem): void;
 }
 
 export class HUD {
@@ -178,6 +204,8 @@ export class HUD {
   private readonly opOnTimeEl: HTMLElement;
   private readonly opReputationEl: HTMLElement;
   private readonly opGroundEl: HTMLElement;
+  private readonly opAvailableGatesEl: HTMLElement;
+  private readonly opActiveOperationsEl: HTMLElement;
   private readonly noticeEl: HTMLElement;
   private readonly flightHistoryEl: HTMLElement;
   private readonly flightHistoryListEl: HTMLElement;
@@ -193,6 +221,12 @@ export class HUD {
   private readonly growthGoalBodyEl: HTMLElement;
   private readonly saveStatusEl: HTMLElement;
   private readonly airportStatusEl: HTMLElement;
+  private readonly actionCenterEl: HTMLElement;
+  private readonly actionCenterListEl: HTMLElement;
+  private readonly actionCenterTitleEl: HTMLElement;
+  /** V1.8 §34-35 — user-collapsible so it never has to permanently cover the
+   * 3D view on a small screen; defaults open (same as every other panel). */
+  private actionCenterCollapsed = false;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -200,6 +234,9 @@ export class HUD {
   /** Priority of the notice currently on screen, and when it stops guarding. */
   private noticePriority: NoticePriority = 3;
   private noticeGuardUntil = 0;
+  /** Current Action Center rows, kept so the click-delegation handler below
+   * can map a clicked row index back to its item (V1.8 §10). */
+  private actionItems: ActionItem[] = [];
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.root = container;
@@ -227,6 +264,8 @@ export class HUD {
     this.opOnTimeEl = this.must(".js-op-ontime");
     this.opReputationEl = this.must(".js-op-reputation");
     this.opGroundEl = this.must(".js-op-ground");
+    this.opAvailableGatesEl = this.must(".js-op-available-gates");
+    this.opActiveOperationsEl = this.must(".js-op-active-operations");
     this.noticeEl = this.must(".js-notice");
     this.flightHistoryEl = this.must(".js-flight-history");
     this.flightHistoryListEl = this.must(".js-flight-history-list");
@@ -242,6 +281,13 @@ export class HUD {
     this.growthGoalBodyEl = this.must(".js-growth-goal-body");
     this.saveStatusEl = this.must(".js-save-status");
     this.airportStatusEl = this.must(".js-airport-status");
+    this.actionCenterEl = this.must(".js-action-center");
+    this.actionCenterListEl = this.must(".js-action-center-list");
+    this.actionCenterTitleEl = this.must(".js-action-center-title");
+    this.actionCenterTitleEl.addEventListener("click", () => {
+      this.actionCenterCollapsed = !this.actionCenterCollapsed;
+      this.renderActionCenter();
+    });
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -249,6 +295,16 @@ export class HUD {
     this.must(".js-grid").addEventListener("click", callbacks.onToggleGrid);
     this.must(".js-save").addEventListener("click", callbacks.onSave);
     this.must(".js-load").addEventListener("click", callbacks.onLoad);
+
+    // Event delegation (V1.8 §10): rows are re-rendered wholesale on every
+    // setActionItems() call, so one listener on the list container — rather
+    // than one per row — is both simpler and avoids leaking listeners.
+    this.actionCenterListEl.addEventListener("click", (ev) => {
+      const row = (ev.target as HTMLElement).closest<HTMLElement>(".action-row");
+      const idx = row ? Number(row.dataset.index) : NaN;
+      const item = Number.isInteger(idx) ? this.actionItems[idx] : undefined;
+      if (item && item.kind !== "INFO") callbacks.onActionClick(item);
+    });
   }
 
   /** Save-status badge next to the airport title (spec §E.1). */
@@ -367,6 +423,49 @@ export class HUD {
     this.opOnTimeEl.textContent = `${o.onTimeRate}%`;
     this.opReputationEl.textContent = String(o.reputation);
     this.opGroundEl.textContent = String(o.groundEfficiency);
+    this.opAvailableGatesEl.textContent = String(o.availableGates);
+    this.opActiveOperationsEl.textContent = String(o.activeOperations);
+  }
+
+  /**
+   * Render the "확인 필요" Action Center (V1.8 §8-11) — a short, priority-
+   * ordered list of real conditions read from GameState by Game. Hidden when
+   * there is genuinely nothing to flag (§28 — never show a fabricated row).
+   */
+  setActionItems(items: ActionItem[]): void {
+    this.actionItems = items;
+    this.renderActionCenter();
+  }
+
+  /** Shared by setActionItems() and the collapse-toggle click handler so
+   * neither path can fall out of sync with the other (V1.8 §34-35). */
+  private renderActionCenter(): void {
+    const items = this.actionItems;
+    if (items.length === 0) {
+      this.actionCenterEl.hidden = true;
+      return;
+    }
+    this.actionCenterEl.hidden = false;
+    this.actionCenterTitleEl.textContent = this.actionCenterCollapsed
+      ? `${t("actionCenter")} (${items.length})`
+      : t("actionCenter");
+    this.actionCenterListEl.hidden = this.actionCenterCollapsed;
+    if (this.actionCenterCollapsed) return;
+
+    this.actionCenterListEl.innerHTML = items
+      .map((item, i) => {
+        const clickable = item.kind !== "INFO";
+        return (
+          `<div class="action-row ac-p${item.priority}${clickable ? " ac-clickable" : ""}" data-index="${i}">` +
+          `<span class="ac-icon">${escapeHtml(item.icon)}</span>` +
+          `<span class="ac-body">` +
+          `<span class="ac-text">${escapeHtml(item.text)}</span>` +
+          (item.detail ? `<span class="ac-detail">${escapeHtml(item.detail)}</span>` : "") +
+          `</span>` +
+          `</div>`
+        );
+      })
+      .join("");
   }
 
   /**
@@ -586,6 +685,10 @@ function buildTemplate(): string {
   </div>
 
   <div class="hud-mid">
+    <div class="hud-panel action-center js-action-center" hidden>
+      <div class="stat-panel-title action-center-title js-action-center-title">${t("actionCenter")}</div>
+      <div class="action-center-list js-action-center-list"></div>
+    </div>
     <div class="hud-panel growth-goal-panel js-growth-goal" hidden>
       <div class="stat-panel-title">다음 목표</div>
       <div class="growth-goal-body js-growth-goal-body"></div>
@@ -631,6 +734,8 @@ function buildTemplate(): string {
           <div class="stat-card"><span>${t("opOnTime")}</span><strong class="js-op-ontime">90%</strong></div>
           <div class="stat-card"><span>${t("opGround")}</span><strong class="js-op-ground">70</strong></div>
           <div class="stat-card"><span>${t("opReputation")}</span><strong class="js-op-reputation">0</strong></div>
+          <div class="stat-card"><span>${t("opAvailableGates")}</span><strong class="js-op-available-gates">0</strong></div>
+          <div class="stat-card"><span>${t("opActiveOperations")}</span><strong class="js-op-active-operations">0</strong></div>
         </div>
       </div>
       <div class="hud-selection js-selection" hidden>
