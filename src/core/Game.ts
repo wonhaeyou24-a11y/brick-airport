@@ -38,8 +38,9 @@ import {
   checkPurchase,
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
-import { computeAirportLevel } from "../progression/AirportProgression";
+import { computeAirportLevel, LEVEL_REQUIREMENTS } from "../progression/AirportProgression";
 import {
+  EXPANSION_TIERS,
   MAX_EXPANSION_LEVEL,
   checkExpansion,
   expansionBounds,
@@ -167,6 +168,8 @@ export class Game {
   private shownGroundOpsSig = "";
   /** Signature of the airport status indicator (V1.5). */
   private shownAirportStatusSig = "";
+  /** Signature of the "다음 목표" growth-goal panel (V1.6). */
+  private shownGrowthGoalSig = "";
   /** Signature of the Missions panel (V1.0-E). */
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
@@ -1094,6 +1097,7 @@ export class Game {
     this.refreshAirportStatus();
     this.refreshFlightHistory();
     this.refreshGroundOps();
+    this.refreshGrowthGoal();
     this.refreshMissions();
     this.refreshEvents();
     this.refreshBuildMenu();
@@ -1324,10 +1328,66 @@ export class Game {
       a.totalPassengers ?? 0,
     );
     if (target <= a.level) return; // only ever rises; write only on change
+    const previousLevel = a.level;
     a.level = target;
-    this.hud.showNotice(`공항 레벨 ${target}! 새 건물을 지을 수 있습니다.`);
+    this.hud.showNotice(this.levelUpMessage(previousLevel, target), 3600);
     this.refreshHudStats();
     this.requestEventSave();
+  }
+
+  /**
+   * Level-up celebration text (spec §22) — lists only what actually just
+   * unlocked at this level (buildings from BUILDING_CONFIG, the next
+   * expansion tier from Expansion.ts), never a generic "new stuff!" line
+   * when nothing did. One notice, not a second parallel banner.
+   */
+  private levelUpMessage(fromLevel: number, toLevel: number): string {
+    const unlockedBuildings = BUILDING_TYPES.filter(
+      (bt) => BUILDING_CONFIG[bt].requiredLevel > fromLevel && BUILDING_CONFIG[bt].requiredLevel <= toLevel,
+    ).map((bt) => buildingLabel(bt));
+    const unlockedExpansion = EXPANSION_TIERS.find(
+      (tier) => tier.requiredLevel > fromLevel && tier.requiredLevel <= toLevel && tier.level > 0,
+    );
+
+    const lines = [`🎉 공항 레벨 업! Lv.${toLevel}`];
+    if (unlockedBuildings.length > 0) {
+      lines.push(`새로운 건설: ${unlockedBuildings.join(", ")}`);
+    }
+    if (unlockedExpansion) {
+      lines.push(`공항 확장 가능: ${unlockedExpansion.worldSize}×${unlockedExpansion.worldSize}`);
+    }
+    if (unlockedBuildings.length === 0 && !unlockedExpansion) {
+      lines.push("공항이 한 단계 더 성장했습니다.");
+    }
+    return lines.join("\n");
+  }
+
+  /**
+   * "다음 목표" panel (V1.6 §23-25) — read straight from
+   * AirportProgression.LEVEL_REQUIREMENTS (an OR condition: either threshold
+   * unlocks the level), never recomputed or reinterpreted here. Hidden once
+   * there is no next level (spec's own "실제 조건을 잘못 설명하면 안 된다").
+   * Distinct from Mission — no MissionData involved (spec §26).
+   */
+  private refreshGrowthGoal(): void {
+    const a = this.state.airport;
+    const nextReq = LEVEL_REQUIREMENTS.find((r) => r.level === a.level + 1);
+    if (!nextReq) {
+      if (this.shownGrowthGoalSig === "max") return;
+      this.shownGrowthGoalSig = "max";
+      this.hud.setGrowthGoal(null);
+      return;
+    }
+    const flights = a.totalFlights ?? 0;
+    const passengers = a.totalPassengers ?? 0;
+    const sig = `${nextReq.level}|${flights}|${passengers}`;
+    if (sig === this.shownGrowthGoalSig) return;
+    this.shownGrowthGoalSig = sig;
+    this.hud.setGrowthGoal({
+      nextLevel: nextReq.level,
+      flights: { current: Math.min(flights, nextReq.minFlights), target: nextReq.minFlights },
+      passengers: { current: Math.min(passengers, nextReq.minPassengers), target: nextReq.minPassengers },
+    });
   }
 
   /** Push cost / lock state to the BuildMenu when level or money changes. */

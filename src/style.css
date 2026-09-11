@@ -178,7 +178,13 @@ body {
   padding: 8px 16px;
   font-size: 15px;
   font-weight: 800;
-  white-space: nowrap;
+  /* Most notices are one short line; a level-up celebration (V1.6) uses a
+     second line for what just unlocked — pre-line handles both without a
+     second notice component. */
+  white-space: pre-line;
+  max-width: min(90vw, 380px);
+  text-align: center;
+  line-height: 1.4;
   opacity: 0;
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
@@ -314,9 +320,28 @@ body {
 /* ------------------------------------------------ missions & events --- */
 
 .mission-panel,
-.event-panel {
+.event-panel,
+.growth-goal-panel {
   max-width: 340px;
   font-size: 12px;
+}
+
+.growth-target {
+  font-weight: 700;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.growth-goal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.growth-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .mission-list,

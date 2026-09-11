@@ -90,6 +90,18 @@ export interface EventRow {
   timeText: string;
 }
 
+/**
+ * "다음 목표" panel (V1.6 §23-25) — Progression guidance, distinct from
+ * Mission (spec §26): the airport's own OR-condition growth thresholds, read
+ * straight from AirportProgression.LEVEL_REQUIREMENTS. Hidden once the
+ * airport is at its max level (nothing left to show).
+ */
+export interface GrowthGoalInfo {
+  nextLevel: number;
+  flights: { current: number; target: number };
+  passengers: { current: number; target: number };
+}
+
 /** Live operations metrics shown under the Airport Statistics grid (V0.7 / V0.8). */
 export interface OperationsInfo {
   serviceScore: number;
@@ -152,6 +164,8 @@ export class HUD {
   private readonly missionsListEl: HTMLElement;
   private readonly eventsEl: HTMLElement;
   private readonly eventsListEl: HTMLElement;
+  private readonly growthGoalEl: HTMLElement;
+  private readonly growthGoalBodyEl: HTMLElement;
   private readonly saveStatusEl: HTMLElement;
   private readonly airportStatusEl: HTMLElement;
 
@@ -194,6 +208,8 @@ export class HUD {
     this.missionsListEl = this.must(".js-missions-list");
     this.eventsEl = this.must(".js-events");
     this.eventsListEl = this.must(".js-events-list");
+    this.growthGoalEl = this.must(".js-growth-goal");
+    this.growthGoalBodyEl = this.must(".js-growth-goal-body");
     this.saveStatusEl = this.must(".js-save-status");
     this.airportStatusEl = this.must(".js-airport-status");
 
@@ -431,6 +447,35 @@ export class HUD {
       .join("");
   }
 
+  /**
+   * "다음 목표" panel (V1.6 §23-25) — shows the airport's own OR-condition
+   * growth thresholds. Pass null once the airport is at its max level (no
+   * next level to work toward) to hide the panel.
+   */
+  setGrowthGoal(info: GrowthGoalInfo | null): void {
+    if (!info) {
+      this.growthGoalEl.hidden = true;
+      return;
+    }
+    this.growthGoalEl.hidden = false;
+    const row = (label: string, cur: number, target: number) => {
+      const pct = Math.round(clamp01(target > 0 ? cur / target : 0) * 100);
+      return (
+        `<div class="growth-row">` +
+        `<div class="mrow-head">` +
+        `<span class="mrow-title">${escapeHtml(label)}</span>` +
+        `<span class="mrow-progress">${cur} / ${target}</span>` +
+        `</div>` +
+        `<div class="mrow-bar"><i style="width:${pct}%"></i></div>` +
+        `</div>`
+      );
+    };
+    this.growthGoalBodyEl.innerHTML =
+      `<div class="growth-target">Lv.${info.nextLevel} 달성 (둘 중 하나)</div>` +
+      row(t("statFlights"), info.flights.current, info.flights.target) +
+      row(t("statPassengers"), info.passengers.current, info.passengers.target);
+  }
+
   private must(selector: string): HTMLElement {
     const el = this.root.querySelector<HTMLElement>(selector);
     if (!el) throw new Error(`HUD: missing element "${selector}"`);
@@ -475,6 +520,10 @@ function buildTemplate(): string {
   </div>
 
   <div class="hud-mid">
+    <div class="hud-panel growth-goal-panel js-growth-goal" hidden>
+      <div class="stat-panel-title">다음 목표</div>
+      <div class="growth-goal-body js-growth-goal-body"></div>
+    </div>
     <div class="hud-panel mission-panel js-missions" hidden>
       <div class="stat-panel-title">${t("missions")}</div>
       <div class="mission-list js-missions-list"></div>
