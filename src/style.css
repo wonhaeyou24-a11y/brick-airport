@@ -350,7 +350,7 @@ body {
   top: 78px;
   left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
-  max-height: calc(100% - 78px - 190px);
+  max-height: calc(100% - 78px - 228px);
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -563,7 +563,7 @@ body {
 .zoom-cluster {
   position: absolute;
   right: var(--hud-gap);
-  bottom: 160px;
+  bottom: 228px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -626,7 +626,7 @@ body {
   position: absolute;
   left: calc(168px + var(--hud-gap) * 2);
   right: 140px;
-  bottom: 160px;
+  bottom: 228px;
   pointer-events: none;
 }
 
@@ -1086,7 +1086,7 @@ body {
   top: 78px;
   left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
-  max-height: calc(100% - 78px - 190px);
+  max-height: calc(100% - 78px - 228px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1266,13 +1266,13 @@ body {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
     width: auto;
-    max-height: calc(100% - 64px - 150px);
+    max-height: calc(100% - 64px - 228px);
   }
 
   .info-slot {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
-    bottom: 128px;
+    bottom: 228px;
   }
 
   .help-text {
@@ -1289,7 +1289,7 @@ body {
   }
 
   .zoom-cluster {
-    bottom: 128px;
+    bottom: 228px;
   }
 
   .activity-cards {
@@ -1306,7 +1306,7 @@ body {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
     width: auto;
-    max-height: calc(100% - 64px - 150px);
+    max-height: calc(100% - 64px - 228px);
   }
 
   .build-type,
