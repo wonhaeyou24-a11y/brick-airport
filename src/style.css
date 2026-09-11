@@ -359,7 +359,7 @@ body {
   top: 78px;
   left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
-  max-height: calc(100% - 78px - 228px);
+  max-height: calc(100% - 78px - 240px);
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -460,6 +460,14 @@ body {
 
 .activity-card:hover {
   border-color: var(--accent-cyan);
+}
+
+/* The card matching whatever is currently selected — from a direct 3D
+   click OR a card click — lights up so the two selection surfaces always
+   agree (V2.0 final-stage data-binding requirement). */
+.activity-card.is-selected {
+  border-color: var(--accent-yellow);
+  box-shadow: 0 0 14px rgba(255, 200, 0, 0.35);
 }
 
 /* Image/illustration header — the reference's photo thumbnail area. A flat
@@ -608,7 +616,7 @@ body {
 .zoom-cluster {
   position: absolute;
   right: var(--hud-gap);
-  bottom: 228px;
+  bottom: 240px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -675,7 +683,7 @@ body {
   position: absolute;
   left: calc(168px + var(--hud-gap) * 2);
   right: 140px;
-  bottom: 228px;
+  bottom: 240px;
   pointer-events: none;
 }
 
@@ -1135,7 +1143,7 @@ body {
   top: 78px;
   left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
-  max-height: calc(100% - 78px - 228px);
+  max-height: calc(100% - 78px - 240px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1317,13 +1325,13 @@ body {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
     width: auto;
-    max-height: calc(100% - 64px - 228px);
+    max-height: calc(100% - 64px - 240px);
   }
 
   .info-slot {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
-    bottom: 228px;
+    bottom: 240px;
   }
 
   .help-text {
@@ -1340,7 +1348,7 @@ body {
   }
 
   .zoom-cluster {
-    bottom: 228px;
+    bottom: 240px;
   }
 
   .activity-cards {
@@ -1357,7 +1365,7 @@ body {
     left: calc(56px + var(--hud-gap) * 2);
     right: var(--hud-gap);
     width: auto;
-    max-height: calc(100% - 64px - 228px);
+    max-height: calc(100% - 64px - 240px);
   }
 
   .build-type,

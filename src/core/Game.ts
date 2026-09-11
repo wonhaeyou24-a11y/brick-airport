@@ -816,6 +816,7 @@ export class Game {
     if (selected) {
       this.state.setSelection(selected.selectionKind, selected.id);
       this.hud.setSelection(this.describeSelectable(selected));
+      this.hud.setSelectedTarget(selected.id);
       if (selected.selectionKind === "AIRCRAFT") {
         this.cameraController.followTarget(selected.object);
       } else {
@@ -824,6 +825,7 @@ export class Game {
     } else {
       this.state.setSelection(null, null);
       this.hud.setSelection(null);
+      this.hud.setSelectedTarget(null);
       this.cameraController.followTarget(null);
     }
   }

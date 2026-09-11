@@ -310,6 +310,10 @@ export class HUD {
   /** Kept so a click on an activity card can be mapped back to its target
    * (same event-delegation pattern as the Action Center list above). */
   private activityCards: ActivityCard[] = [];
+  /** The currently-selected object's id (from ANY source — a direct 3D
+   * click, or a card click), so the matching bottom card can highlight even
+   * when selection happened elsewhere. */
+  private selectedTargetId: string | null = null;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -550,6 +554,29 @@ export class HUD {
           `</div>`,
       )
       .join("");
+    this.applySelectedCardHighlight();
+  }
+
+  /**
+   * The currently-selected object's id, from ANY source (a direct 3D click
+   * or a card click) — so the matching bottom card highlights even when
+   * selection happened outside the card row (spec: "3D 객체 클릭 시 ...
+   * 하단 카드 하이라이트"). Cheap class toggle, never a re-render.
+   */
+  setSelectedTarget(targetId: string | null): void {
+    this.selectedTargetId = targetId;
+    this.applySelectedCardHighlight();
+  }
+
+  private applySelectedCardHighlight(): void {
+    const els = this.activityCardsEl.querySelectorAll<HTMLElement>(".activity-card");
+    els.forEach((el, i) => {
+      const card = this.activityCards[i];
+      el.classList.toggle(
+        "is-selected",
+        !!card && this.selectedTargetId != null && card.targetId === this.selectedTargetId,
+      );
+    });
   }
 
   /** Save-status badge next to the airport title (spec §E.1). */
