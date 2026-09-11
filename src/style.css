@@ -65,6 +65,11 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  /* A drag that starts over panel text must never turn into a native text
+     selection (and the copy-bubble that follows it) — it should just miss
+     and, over empty HUD space, fall through to the canvas underneath. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .hud-panel {
@@ -203,13 +208,16 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--hud-gap);
-  /* The middle stack (missions, events, recent flights, ground ops) must never
-     push the bottom HUD off-screen — cap it and let it scroll internally. */
+  /* V1.9-D: no internal scroll for now — a scrollable region here competed
+     with the canvas for the mouse wheel (scrolling this stack instead of
+     zooming). Overflow/repositioning is real layout work for the next
+     version; for now the stack simply grows past its old cap rather than
+     scroll. pointer-events stays off the container itself (each .hud-panel
+     re-enables it) so wheel/drag over the gaps between panels still reaches
+     the canvas. */
   min-height: 0;
-  max-height: calc(100vh - 340px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  pointer-events: auto;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .hud-bottom {
@@ -913,11 +921,10 @@ body {
     display: none;
   }
 
-  /* Keep the middle info panels from pushing the bottom HUD off-screen (§67). */
+  /* V1.9-D: same no-scroll fix as desktop — see .hud-mid above. */
   .hud-mid {
-    max-height: 34vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    pointer-events: auto;
+    max-height: none;
+    overflow: visible;
+    pointer-events: none;
   }
 }
