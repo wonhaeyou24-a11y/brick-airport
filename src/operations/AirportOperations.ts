@@ -206,6 +206,15 @@ export function experienceLabel(satisfaction: number): string {
   return "Very Unhappy";
 }
 
+/** Korean version of experienceLabel (V1.4-i18n) — same 0-100 score, same buckets. */
+export function experienceLabelKo(satisfaction: number): string {
+  if (satisfaction >= 90) return "매우 만족";
+  if (satisfaction >= 75) return "만족";
+  if (satisfaction >= 50) return "보통";
+  if (satisfaction >= 30) return "불만족";
+  return "매우 불만족";
+}
+
 /**
  * Deterministic pseudo-jitter in [-1, 1] from a string id — so a passenger's
  * satisfaction is stable across recomputes but varies between passengers.

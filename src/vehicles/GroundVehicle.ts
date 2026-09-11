@@ -7,6 +7,7 @@ import {
 } from "../selection/Selectable";
 import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
 import { brickMaterial, COLORS } from "../world/materials";
+import { CURRENT_LOCALE, type Locale } from "../i18n/strings";
 
 /**
  * GroundVehicle — placeholder brick-toy service vehicle + Selectable (V0.8-B).
@@ -54,8 +55,19 @@ const SPEC: Record<GroundVehicleType, VehicleSpec> = {
   },
 };
 
-export function vehicleLabel(type: GroundVehicleType): string {
-  return SPEC[type].label;
+/** Korean player-facing names (V1.4-i18n) — kept beside SPEC[type].label (English). */
+const VEHICLE_LABEL_KO: Record<GroundVehicleType, string> = {
+  BAGGAGE_CART: "수하물 카트",
+  CLEANING_VEHICLE: "청소 차량",
+  FUEL_TRUCK: "급유차",
+  SERVICE_VEHICLE: "서비스 차량",
+};
+
+export function vehicleLabel(
+  type: GroundVehicleType,
+  locale: Locale = CURRENT_LOCALE,
+): string {
+  return locale === "ko" ? VEHICLE_LABEL_KO[type] : SPEC[type].label;
 }
 
 export class GroundVehicle implements Selectable {

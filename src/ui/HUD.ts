@@ -3,6 +3,7 @@
  * emits button intents via callbacks. It holds no game state and never
  * touches Three.js.
  */
+import { formatMoney, formatMoneyDelta, stateLabel, t } from "../i18n/strings";
 
 export interface HudStats {
   airportName: string;
@@ -150,7 +151,7 @@ export class HUD {
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.root = container;
-    this.root.innerHTML = TEMPLATE;
+    this.root.innerHTML = buildTemplate();
 
     this.airportNameEl = this.must(".js-airport-name");
     this.levelEl = this.must(".js-level");
@@ -197,14 +198,14 @@ export class HUD {
   setSaveStatus(status: "IDLE" | "SAVED" | "ERROR"): void {
     this.saveStatusEl.hidden = status === "IDLE";
     this.saveStatusEl.textContent =
-      status === "SAVED" ? "● SAVED" : status === "ERROR" ? "● SAVE ERROR" : "";
+      status === "SAVED" ? `● ${t("saved")}` : status === "ERROR" ? `● ${t("saveError")}` : "";
     this.saveStatusEl.classList.toggle("save-error", status === "ERROR");
   }
 
   setStats(stats: HudStats): void {
     this.airportNameEl.textContent = stats.airportName;
     this.levelEl.textContent = String(stats.level);
-    this.moneyEl.textContent = `$${stats.money.toLocaleString("en-US")}`;
+    this.moneyEl.textContent = formatMoney(stats.money);
     this.aircraftEl.textContent = String(stats.aircraftCount);
     this.gateEl.textContent = String(stats.gateCount);
     this.passengerEl.textContent = String(stats.passengerCount);
@@ -212,14 +213,14 @@ export class HUD {
     this.staffEl.textContent = `${stats.staffActive}/${stats.staffCount}`;
   }
 
-  /** Brief "+$N" pop next to the money stat when ticket revenue lands. */
+  /** Brief "+12,480원" pop next to the money stat when ticket revenue lands. */
   showRevenue(amount: number): void {
-    this.flashMoney(`+$${amount.toLocaleString("en-US")}`, "gain", 1200);
+    this.flashMoney(formatMoneyDelta(amount), "gain", 1200);
   }
 
-  /** Brief "−$N" pop when a building is bought. */
+  /** Brief "-12,480원" pop when a building is bought. */
   showSpend(amount: number): void {
-    this.flashMoney(`−$${amount.toLocaleString("en-US")}`, "spend", 1500);
+    this.flashMoney(formatMoneyDelta(-amount), "spend", 1500);
   }
 
   private flashMoney(text: string, kind: "gain" | "spend", ms: number): void {
@@ -259,7 +260,7 @@ export class HUD {
    */
   setSelection(info: SelectionInfo | null): void {
     if (info) {
-      const parts = ['<span class="sel-label">SELECTED</span>'];
+      const parts = [`<span class="sel-label">${escapeHtml(t("selected"))}</span>`];
       parts.push(`<b class="sel-title">${escapeHtml(info.title)}</b>`);
       for (const line of info.lines ?? []) {
         parts.push(`<span class="sel-line">${escapeHtml(line)}</span>`);
@@ -274,8 +275,8 @@ export class HUD {
   setStatistics(s: AirportStats): void {
     this.statFlightsEl.textContent = String(s.flights);
     this.statPassengersEl.textContent = String(s.passengers);
-    this.statRevenueEl.textContent = `$${s.revenue.toLocaleString("en-US")}`;
-    this.statBalanceEl.textContent = `$${s.balance.toLocaleString("en-US")}`;
+    this.statRevenueEl.textContent = formatMoney(s.revenue);
+    this.statBalanceEl.textContent = formatMoney(s.balance);
     this.statAvgEl.textContent = s.avgPaxPerFlight.toFixed(1);
     this.statBoardingEl.textContent = `${s.boardingRate}%`;
   }
@@ -313,7 +314,7 @@ export class HUD {
           `<span class="fr-id">${escapeHtml(e.id)}</span>` +
           `<span class="fr-route">${escapeHtml(e.route)}</span>` +
           star +
-          `<span class="fr-rev">$${e.revenue.toLocaleString("en-US")}</span>` +
+          `<span class="fr-rev">${escapeHtml(formatMoney(e.revenue))}</span>` +
           `</div>`
         );
       })
@@ -332,9 +333,7 @@ export class HUD {
     this.groundOpsEl.hidden = false;
     this.groundOpsListEl.innerHTML = rows
       .map((r) => {
-        const stateText = r.needsStaff
-          ? "STAFF REQ"
-          : r.state.replace(/_/g, " ");
+        const stateText = r.needsStaff ? "직원 필요" : stateLabel(r.state);
         const stateClass = r.needsStaff
           ? "gop-needsstaff"
           : `gop-${r.state.toLowerCase().replace(/_/g, "-")}`;
@@ -433,7 +432,8 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-const TEMPLATE = /* html */ `
+function buildTemplate(): string {
+  return /* html */ `
   <div class="hud-notice js-notice" hidden></div>
 
   <div class="hud-top">
@@ -443,34 +443,34 @@ const TEMPLATE = /* html */ `
       <b class="save-status js-save-status" hidden></b>
     </div>
     <div class="hud-panel hud-stats">
-      <div class="hud-stat"><span>Level</span><b class="js-level">1</b></div>
+      <div class="hud-stat"><span>${t("level")}</span><b class="js-level">1</b></div>
       <div class="hud-stat hud-stat-money">
-        <span>Money</span><b class="js-money">$10,000</b>
+        <span>${t("balance")}</span><b class="js-money">${escapeHtml(formatMoney(10000))}</b>
         <b class="hud-revenue js-revenue" aria-hidden="true"></b>
       </div>
-      <div class="hud-stat"><span>Aircraft</span><b class="js-aircraft">1</b></div>
-      <div class="hud-stat"><span>Gate</span><b class="js-gate">1</b></div>
-      <div class="hud-stat"><span>Pax</span><b class="js-passengers">0</b></div>
-      <div class="hud-stat"><span>Flights</span><b class="js-flights">0</b></div>
-      <div class="hud-stat"><span>Staff</span><b class="js-staff">0/0</b></div>
+      <div class="hud-stat"><span>${t("aircraft")}</span><b class="js-aircraft">1</b></div>
+      <div class="hud-stat"><span>${t("gate")}</span><b class="js-gate">1</b></div>
+      <div class="hud-stat"><span>${t("passengers")}</span><b class="js-passengers">0</b></div>
+      <div class="hud-stat"><span>${t("flights")}</span><b class="js-flights">0</b></div>
+      <div class="hud-stat"><span>${t("staff")}</span><b class="js-staff">0/0</b></div>
     </div>
   </div>
 
   <div class="hud-mid">
     <div class="hud-panel mission-panel js-missions" hidden>
-      <div class="stat-panel-title">Missions</div>
+      <div class="stat-panel-title">${t("missions")}</div>
       <div class="mission-list js-missions-list"></div>
     </div>
     <div class="hud-panel event-panel js-events" hidden>
-      <div class="stat-panel-title">Operational Event</div>
+      <div class="stat-panel-title">${t("operationalEvent")}</div>
       <div class="event-list js-events-list"></div>
     </div>
     <div class="hud-panel flight-history js-flight-history" hidden>
-      <div class="stat-panel-title">Recent Flights</div>
+      <div class="stat-panel-title">${t("recentFlights")}</div>
       <div class="flight-history-list js-flight-history-list"></div>
     </div>
     <div class="hud-panel ground-ops js-ground-ops" hidden>
-      <div class="stat-panel-title">Ground Operations</div>
+      <div class="stat-panel-title">${t("groundOperations")}</div>
       <div class="ground-ops-list js-ground-ops-list"></div>
     </div>
   </div>
@@ -478,35 +478,36 @@ const TEMPLATE = /* html */ `
   <div class="hud-bottom">
     <div class="hud-panel hud-context">
       <div class="hud-statistics js-statistics">
-        <div class="stat-panel-title">Airport Statistics</div>
+        <div class="stat-panel-title">${t("airportStatistics")}</div>
         <div class="statistics-grid">
-          <div class="stat-card"><span>Flights</span><strong class="js-stat-flights">0</strong></div>
-          <div class="stat-card"><span>Passengers</span><strong class="js-stat-passengers">0</strong></div>
-          <div class="stat-card"><span>Revenue</span><strong class="js-stat-revenue">$0</strong></div>
-          <div class="stat-card"><span>Balance</span><strong class="js-stat-balance">$10,000</strong></div>
-          <div class="stat-card"><span>Avg Pax / Flight</span><strong class="js-stat-avg">0.0</strong></div>
-          <div class="stat-card"><span>Boarding Rate</span><strong class="js-stat-boarding">0%</strong></div>
+          <div class="stat-card"><span>${t("statFlights")}</span><strong class="js-stat-flights">0</strong></div>
+          <div class="stat-card"><span>${t("statPassengers")}</span><strong class="js-stat-passengers">0</strong></div>
+          <div class="stat-card"><span>${t("statRevenue")}</span><strong class="js-stat-revenue">${escapeHtml(formatMoney(0))}</strong></div>
+          <div class="stat-card"><span>${t("statBalance")}</span><strong class="js-stat-balance">${escapeHtml(formatMoney(10000))}</strong></div>
+          <div class="stat-card"><span>${t("statAvg")}</span><strong class="js-stat-avg">0.0</strong></div>
+          <div class="stat-card"><span>${t("statBoarding")}</span><strong class="js-stat-boarding">0%</strong></div>
         </div>
-        <div class="stat-panel-title operations-title">Operations</div>
+        <div class="stat-panel-title operations-title">${t("operations")}</div>
         <div class="operations-grid">
-          <div class="stat-card"><span>Service</span><strong class="js-op-service">50</strong></div>
-          <div class="stat-card"><span>Satisfaction</span><strong class="js-op-satisfaction">70</strong></div>
-          <div class="stat-card"><span>On-time</span><strong class="js-op-ontime">90%</strong></div>
-          <div class="stat-card"><span>Ground Eff</span><strong class="js-op-ground">70</strong></div>
-          <div class="stat-card"><span>Reputation</span><strong class="js-op-reputation">0</strong></div>
+          <div class="stat-card"><span>${t("opService")}</span><strong class="js-op-service">50</strong></div>
+          <div class="stat-card"><span>${t("opSatisfaction")}</span><strong class="js-op-satisfaction">70</strong></div>
+          <div class="stat-card"><span>${t("opOnTime")}</span><strong class="js-op-ontime">90%</strong></div>
+          <div class="stat-card"><span>${t("opGround")}</span><strong class="js-op-ground">70</strong></div>
+          <div class="stat-card"><span>${t("opReputation")}</span><strong class="js-op-reputation">0</strong></div>
         </div>
       </div>
       <div class="hud-selection js-selection" hidden>
-        <span class="sel-label">SELECTED</span><em class="empty">Nothing</em>
+        <span class="sel-label">${t("selected")}</span><em class="empty">-</em>
       </div>
     </div>
     <div class="hud-controls">
-      <button class="brick-btn btn-reset js-save" title="Save">SAVE</button>
-      <button class="brick-btn btn-reset js-load" title="Load">LOAD</button>
-      <button class="brick-btn btn-reset js-grid" title="Toggle grid">GRID</button>
-      <button class="brick-btn btn-reset js-reset" title="Reset view">RESET</button>
+      <button class="brick-btn btn-reset js-save" title="${t("save")}">${t("save")}</button>
+      <button class="brick-btn btn-reset js-load" title="${t("load")}">${t("load")}</button>
+      <button class="brick-btn btn-reset js-grid" title="${t("grid")}">${t("grid")}</button>
+      <button class="brick-btn btn-reset js-reset" title="${t("reset")}">${t("reset")}</button>
       <button class="brick-btn js-zoom-out" title="Zoom out">&minus;</button>
       <button class="brick-btn js-zoom-in" title="Zoom in">+</button>
     </div>
   </div>
 `;
+}

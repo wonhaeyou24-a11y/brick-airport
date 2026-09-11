@@ -33,6 +33,7 @@ import {
   BUILDING_CONFIG,
   BUILDING_TYPES,
   getBuildingConfig,
+  buildingLabel,
   checkPurchase,
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
@@ -64,7 +65,8 @@ import {
   staffRoleConfig,
   staffRoleLabel,
 } from "../staff/StaffConfig";
-import { jitterFromId, experienceLabel } from "../operations/AirportOperations";
+import { jitterFromId, experienceLabelKo } from "../operations/AirportOperations";
+import { CURRENT_LOCALE, formatMoney, stateLabel, t } from "../i18n/strings";
 import { getFacilityEffect } from "../buildings/FacilityConfig";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
@@ -312,7 +314,7 @@ export class Game {
       hudContainer,
       BUILDING_TYPES.map((type) => ({
         type,
-        label: BUILDING_CONFIG[type].label,
+        label: buildingLabel(type),
       })),
       {
         onSelectType: (type) => this.onBuildTypeSelected(type),
@@ -367,7 +369,7 @@ export class Game {
     this.saveStatus = result.ok ? "SAVED" : "ERROR";
     this.hud.setSaveStatus(this.saveStatus);
     this.secondsSinceSave = 0;
-    if (!result.ok) this.hud.showNotice("Save failed — previous save kept.");
+    if (!result.ok) this.hud.showNotice("저장 실패 — 이전 저장 유지됨");
     return result.ok;
   }
 
@@ -405,10 +407,10 @@ export class Game {
    */
   requestLoad(): void {
     if (!this.saveManager.hasSave()) {
-      this.hud.showNotice("No save to load.");
+      this.hud.showNotice("불러올 저장 데이터가 없습니다.");
       return;
     }
-    if (!window.confirm("Load the last save? Unsaved progress will be lost.")) {
+    if (!window.confirm("마지막 저장을 불러올까요? 저장하지 않은 진행 상황은 사라집니다.")) {
       return;
     }
     window.location.reload();
@@ -498,7 +500,7 @@ export class Game {
       this.state.airport.level,
     );
     if (!purchase.ok && purchase.reason === "LOCKED") {
-      this.hud.showNotice(`Requires Airport Level ${purchase.requiredLevel}`);
+      this.hud.showNotice(`공항 레벨 ${purchase.requiredLevel} 이상 필요`);
       return;
     }
     this.buildController.begin(type);
@@ -508,8 +510,8 @@ export class Game {
     if (purchase.ok) return;
     this.hud.showNotice(
       purchase.reason === "LOCKED"
-        ? `Requires Airport Level ${purchase.requiredLevel}`
-        : "Not enough money",
+        ? `공항 레벨 ${purchase.requiredLevel} 이상 필요`
+        : "잔액이 부족합니다",
     );
   }
 
@@ -532,16 +534,16 @@ export class Game {
     if (!result.ok) {
       this.hud.showNotice(
         result.reason === "LOCKED"
-          ? `Requires Airport Level ${result.requiredLevel}`
+          ? `공항 레벨 ${result.requiredLevel} 이상 필요`
           : result.reason === "MAX_LEVEL"
-            ? "Airport is fully expanded"
-            : "Not enough money",
+            ? "이미 최대로 확장되었습니다"
+            : "잔액이 부족합니다",
       );
       return false;
     }
     const tier = expansionTier(level + 1);
     if (!this.state.spendMoney(tier.cost)) {
-      this.hud.showNotice("Not enough money");
+      this.hud.showNotice("잔액이 부족합니다");
       return false;
     }
     this.hud.showSpend(tier.cost);
@@ -550,7 +552,7 @@ export class Game {
     this.cameraController.setHomeViewSize(tier.worldSize * 0.96);
     this.cameraController.setPanBounds(tier.worldSize / 2);
     this.hud.showNotice(
-      `Airport expanded to ${tier.worldSize}×${tier.worldSize}!`,
+      `공항이 ${tier.worldSize}×${tier.worldSize}로 확장되었습니다!`,
     );
     this.requestEventSave();
     return true;
@@ -628,7 +630,7 @@ export class Game {
       speed: STAFF_CONFIG.speed,
     });
     this.refreshHudStats();
-    this.hud.showNotice(`Hired ${name} · ${staffRoleLabel(role)}`);
+    this.hud.showNotice(`${name} 채용됨 · ${staffRoleLabel(role)}`);
     return true;
   }
 
@@ -678,11 +680,11 @@ export class Game {
 
       const cfg = state.type ? getBuildingConfig(state.type) : null;
       this.hud.setSelection({
-        title: "BUILD MODE",
+        title: t("buildMode"),
         lines: [
-          `${cfg ? cfg.label : "—"}${cfg ? `  $${cfg.cost.toLocaleString("en-US")}` : ""}`,
-          state.cell ? `Cell ${state.cell.col}, ${state.cell.row}` : "—",
-          `Status: ${buildStatusText(state)}`,
+          `${state.type ? buildingLabel(state.type) : "—"}${cfg ? `  ${formatMoney(cfg.cost)}` : ""}`,
+          state.cell ? `${t("cell")} ${state.cell.col}, ${state.cell.row}` : "—",
+          `${t("status")}: ${buildStatusText(state)}`,
         ],
       });
     } else {
@@ -725,17 +727,17 @@ export class Game {
       if (a) {
         const flight = this.state.getFlightByAircraft(a.id);
         if (flight) {
-          lines.push(`Flight: ${flight.id}`);
-          lines.push(`Route: ${flightRoute(flight)}`);
+          lines.push(`${t("flight")}: ${flight.id}`);
+          lines.push(`${t("route")}: ${flightRoute(flight)}`);
           lines.push(
-            `Status: ${flight.state}${flight.delayed ? " ⚠ delayed" : ""}`,
+            `${t("status")}: ${stateLabel(flight.state)}${flight.delayed ? " ⚠ 지연" : ""}`,
           );
         }
-        lines.push(`State: ${a.state}`);
-        lines.push(`Gate: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
+        lines.push(`${t("state")}: ${stateLabel(a.state)}`);
+        lines.push(`${t("gate")}: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
         const board = this.state.getAircraftBoarding(a.id);
         if (board.total > 0) {
-          lines.push(`Passengers: ${board.boarded} / ${board.total}`);
+          lines.push(`${t("passengers")}: ${board.boarded} / ${board.total}`);
         }
         if (flight) lines.push(flightProgressLine(flight.state));
         if (flight) {
@@ -749,16 +751,16 @@ export class Game {
       const v = this.state.getGroundVehicle(s.id);
       const lines: string[] = [];
       if (v) {
-        lines.push(`Status: ${v.state}`);
+        lines.push(`${t("status")}: ${stateLabel(v.state)}`);
         const op = this.state.getGroundOperation(v.operationId);
         if (op) {
           const flight = this.state.getFlight(op.flightId);
-          lines.push(`Operation: ${opLabel(op.type)}`);
-          lines.push(`Flight: ${flight ? flight.id : "—"}`);
-          lines.push(`Aircraft: ${op.aircraftId}`);
-          lines.push(`Gate: ${gateName(op.gateId)}`);
+          lines.push(`${t("operation")}: ${opLabel(op.type)}`);
+          lines.push(`${t("flight")}: ${flight ? flight.id : "—"}`);
+          lines.push(`${t("aircraft")}: ${op.aircraftId}`);
+          lines.push(`${t("gate")}: ${gateName(op.gateId)}`);
         } else {
-          lines.push("Operation: —");
+          lines.push(`${t("operation")}: —`);
         }
       }
       return { title: s.getSelectionLabel(), lines };
@@ -768,17 +770,17 @@ export class Game {
       const st = this.state.getStaff(s.id);
       const lines: string[] = [];
       if (st) {
-        lines.push(`Role: ${staffRoleLabel(st.role)}`);
-        lines.push(`State: ${st.state}`);
-        lines.push(`Skill: ${st.skill}`);
+        lines.push(`${t("role")}: ${staffRoleLabel(st.role)}`);
+        lines.push(`${t("state")}: ${stateLabel(st.state)}`);
+        lines.push(`${t("skill")}: ${st.skill}`);
         const op = this.state.getGroundOperation(st.operationId);
         if (op) {
           const flight = this.state.getFlight(op.flightId);
-          lines.push(`Operation: ${opLabel(op.type)}`);
-          lines.push(`Flight: ${flight ? flight.id : "—"}`);
-          lines.push(`Gate: ${gateName(op.gateId)}`);
+          lines.push(`${t("operation")}: ${opLabel(op.type)}`);
+          lines.push(`${t("flight")}: ${flight ? flight.id : "—"}`);
+          lines.push(`${t("gate")}: ${gateName(op.gateId)}`);
         } else {
-          lines.push("Operation: —");
+          lines.push(`${t("operation")}: —`);
         }
       }
       return { title: s.getSelectionLabel(), lines };
@@ -789,21 +791,21 @@ export class Game {
       const lines: string[] = [];
       if (p) {
         const flight = this.state.getFlight(p.flightId);
-        lines.push(`Flight: ${flight ? flight.id : "—"}`);
-        if (flight) lines.push(`Route: ${flightRoute(flight)}`);
-        lines.push(`${p.routeType} · ${p.state}`);
+        lines.push(`${t("flight")}: ${flight ? flight.id : "—"}`);
+        if (flight) lines.push(`${t("route")}: ${flightRoute(flight)}`);
+        lines.push(`${routeTypeLabel(p.routeType)} · ${stateLabel(p.state)}`);
         if (flight) {
           lines.push(
-            `Flight status: ${flight.state}${flight.delayed ? " ⚠ delayed" : ""}`,
+            `${t("flight")} ${t("status")}: ${stateLabel(flight.state)}${flight.delayed ? " ⚠ 지연" : ""}`,
           );
         }
-        lines.push(`Aircraft: ${p.aircraftId ?? "—"}`);
-        lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
+        lines.push(`${t("aircraft")}: ${p.aircraftId ?? "—"}`);
+        lines.push(`${t("gate")}: ${p.gateId ? gateName(p.gateId) : "—"}`);
         if (p.satisfaction !== undefined) {
-          lines.push(`Satisfaction: ${p.satisfaction}`);
-          lines.push(`Experience: ${experienceLabel(p.satisfaction)}`);
+          lines.push(`${t("satisfaction")}: ${p.satisfaction}`);
+          lines.push(`${t("experience")}: ${experienceLabelKo(p.satisfaction)}`);
           if (p.waitingSeconds !== undefined) {
-            lines.push(`Waiting: ${p.waitingSeconds}s`);
+            lines.push(`${t("waiting")}: ${p.waitingSeconds}초`);
           }
         }
       }
@@ -820,40 +822,39 @@ export class Game {
           (gate.status === "BOARDING" || gate.status === "READY") &&
           board.total > 0
         ) {
-          lines.push(`${gate.status} · ${board.boarded} / ${board.total}`);
+          lines.push(`${stateLabel(gate.status)} · ${board.boarded} / ${board.total}`);
         } else {
-          lines.push(gate.status);
+          lines.push(stateLabel(gate.status));
         }
         if (gate.aircraftId) {
           const ac = this.state.getAircraft(gate.aircraftId);
           const inbound =
             gate.status === "AVAILABLE" && !!ac && ac.state !== "PARKED";
           lines.push(
-            `Aircraft: ${gate.aircraftId}${inbound ? " (inbound)" : ""}`,
+            `${t("aircraft")}: ${gate.aircraftId}${inbound ? " (접근 중)" : ""}`,
           );
         }
         const gateFlight = this.activeFlightForGate(gate.id);
-        lines.push(`Flight: ${gateFlight ? gateFlight.id : "NONE"}`);
-        if (gateFlight) lines.push(`Route: ${flightRoute(gateFlight)}`);
+        lines.push(`${t("flight")}: ${gateFlight ? gateFlight.id : "없음"}`);
+        if (gateFlight) lines.push(`${t("route")}: ${flightRoute(gateFlight)}`);
         if (gateFlight) {
           const svc = this.groundServiceLabel(gateFlight.id);
-          if (svc) lines.push(`Ground Service: ${svc}`);
+          if (svc) lines.push(`${t("groundService")}: ${svc}`);
         }
       }
       return {
-        title: gate ? `Gate ${gateName(gate.id)}` : "Gate",
+        title: gate ? `${t("gate")} ${gateName(gate.id)}` : t("gate"),
         lines,
       };
     }
     if (b && isServiceFacility(b.type)) {
-      const cfg = getBuildingConfig(b.type);
       const effect = getFacilityEffect(b.type);
       const built = this.state.countBuildingsByType(b.type);
-      const lines = ["Facility", `Level ${b.level}`];
-      if (effect.passengerCapacity) lines.push(`Capacity ${effect.passengerCapacity}`);
-      lines.push(`Comfort +${effect.comfort ?? 0} · Service +${effect.service ?? 0}`);
-      lines.push(built > 1 ? `${built} built (stacked bonus reduced)` : "1 built");
-      return { title: cfg.label, lines };
+      const lines = [t("serviceFacility"), `${t("level2")} ${b.level}`];
+      if (effect.passengerCapacity) lines.push(`${t("capacity")} ${effect.passengerCapacity}`);
+      lines.push(`${t("comfort")} +${effect.comfort ?? 0} · ${t("service")} +${effect.service ?? 0}`);
+      lines.push(built > 1 ? `${built}개 건설됨 (중복 보너스 감소)` : "1개 건설됨");
+      return { title: buildingLabel(b.type), lines };
     }
     if (b && b.type === "TERMINAL") {
       const effect = getFacilityEffect(b.type);
@@ -863,19 +864,19 @@ export class Game {
         TERMINAL_PASSENGER_STATES.has(p.state),
       ).length;
       return {
-        title: "Terminal",
+        title: buildingLabel("TERMINAL"),
         lines: [
-          "Facility",
-          `Level ${b.level}`,
-          `Capacity ${capacity}`,
-          `Comfort +${effect.comfort ?? 0} · Service +${effect.service ?? 0}`,
-          `Passengers ${inTerminal} / ${capacity}`,
+          t("facility"),
+          `${t("level2")} ${b.level}`,
+          `${t("capacity")} ${capacity}`,
+          `${t("comfort")} +${effect.comfort ?? 0} · ${t("service")} +${effect.service ?? 0}`,
+          `${t("passengers")} ${inTerminal} / ${capacity}`,
         ],
       };
     }
     if (b) {
-      const label = capitalize(b.type);
-      return { title: label, lines: [`Type: ${label}`, `Level: ${b.level}`] };
+      const label = buildingLabel(b.type);
+      return { title: label, lines: [`${t("type")}: ${label}`, `${t("level2")}: ${b.level}`] };
     }
     return { title: s.getSelectionLabel() };
   }
@@ -902,7 +903,7 @@ export class Game {
   private groundOpChecklist(flightId: string): string[] {
     const ops = this.state.getGroundOperationsForFlight(flightId);
     if (ops.length === 0) return [];
-    const lines = ["Ground Operations"];
+    const lines = [t("groundOperations")];
     for (const type of TURNAROUND_SEQUENCE) {
       const op = ops.find((o) => o.type === type);
       if (!op) continue;
@@ -921,16 +922,16 @@ export class Game {
     if (op.staffId) {
       const working =
         this.state.getStaff(op.staffId)?.state === "WORKING";
-      return working ? " · staff working" : " · staff on the way";
+      return working ? " · 작업 중" : " · 이동 중";
     }
-    return " · waiting for staff";
+    return " · 직원 대기";
   }
 
   /** "REFUELING" (current task) or "READY" for a gate's turnaround (spec §43). */
   private groundServiceLabel(flightId: string): string | null {
     const ops = this.state.getGroundOperationsForFlight(flightId);
     if (ops.length === 0) return null;
-    if (ops.every((o) => o.state === "COMPLETED")) return "READY";
+    if (ops.every((o) => o.state === "COMPLETED")) return stateLabel("READY");
     const current = ops.find(
       (o) => o.state !== "COMPLETED" && o.state !== "CANCELLED",
     );
@@ -1105,7 +1106,7 @@ export class Game {
         description: m.description,
         progressText: `${formatCount(m.progress)}/${formatCount(m.target)}`,
         progressFraction: m.target > 0 ? m.progress / m.target : 0,
-        rewardText: `+$${m.rewardMoney.toLocaleString("en-US")} · +${m.rewardReputation} rep`,
+        rewardText: `+${formatMoney(m.rewardMoney)} · 평판 +${m.rewardReputation}`,
       })),
     );
   }
@@ -1262,7 +1263,7 @@ export class Game {
     );
     if (target <= a.level) return; // only ever rises; write only on change
     a.level = target;
-    this.hud.showNotice(`Airport Level ${target}! New buildings available.`);
+    this.hud.showNotice(`공항 레벨 ${target}! 새 건물을 지을 수 있습니다.`);
     this.refreshHudStats();
     this.requestEventSave();
   }
@@ -1357,6 +1358,11 @@ export class Game {
 }
 
 /** "SEOUL → TOKYO" for a departure, "TOKYO → SEOUL" for an arrival. */
+function routeTypeLabel(routeType: "DEPARTURE" | "ARRIVAL"): string {
+  if (CURRENT_LOCALE !== "ko") return routeType;
+  return routeType === "DEPARTURE" ? "출발" : "도착";
+}
+
 function flightRoute(flight: FlightData): string {
   return flight.routeType === "ARRIVAL"
     ? `${flight.destination} → ${flight.origin}`
@@ -1374,14 +1380,14 @@ const FLIGHT_PROGRESS_STEPS: readonly FlightState[] = [
 
 /** Compact text progress bar: "Progress: ●●●○○". Pure text, no DOM work. */
 function flightProgressLine(state: FlightState): string {
-  if (state === "CANCELLED") return "Progress: cancelled";
+  if (state === "CANCELLED") return `${t("progress")}: 취소됨`;
   const idx = FLIGHT_PROGRESS_STEPS.indexOf(state);
   const filled =
     state === "COMPLETED" || idx < 0 ? FLIGHT_PROGRESS_STEPS.length : idx + 1;
   const dots = FLIGHT_PROGRESS_STEPS.map((_, i) =>
     i < filled ? "●" : "○",
   ).join("");
-  return `Progress: ${dots}`;
+  return `${t("progress")}: ${dots}`;
 }
 
 /** "BOARDING_SERVICE" -> "Boarding Service" */
@@ -1406,6 +1412,7 @@ const OPERATIONAL_EVENT_ICON: Record<OperationalEventType, string> = {
 };
 
 function opLabel(type: string): string {
+  if (CURRENT_LOCALE === "ko") return stateLabel(type);
   return type
     .toLowerCase()
     .split("_")
@@ -1419,25 +1426,21 @@ function gateName(gateId: string): string {
   return match ? `G-${String(parseInt(match[1], 10)).padStart(2, "0")}` : gateId;
 }
 
-function capitalize(text: string): string {
-  return text.charAt(0) + text.slice(1).toLowerCase();
-}
-
 function validityText(v: PlacementValidity): string {
-  if (v.valid) return "VALID";
-  if (v.reason === "OUT_OF_BOUNDS") return "INVALID (out of bounds)";
-  if (v.reason === "OUTSIDE_EXPANSION") return "INVALID (expand airport first)";
-  return "INVALID (occupied)";
+  if (v.valid) return "유효";
+  if (v.reason === "OUT_OF_BOUNDS") return "불가 (범위 밖)";
+  if (v.reason === "OUTSIDE_EXPANSION") return "불가 (공항 확장 필요)";
+  return "불가 (이미 점유됨)";
 }
 
 /** Combined placement + purchase status for the BUILD MODE HUD line. */
 function buildStatusText(state: BuildModeState): string {
   if (state.purchase && !state.purchase.ok) {
     return state.purchase.reason === "LOCKED"
-      ? `Requires Lv.${state.purchase.requiredLevel}`
-      : "Not enough money";
+      ? `레벨 ${state.purchase.requiredLevel} 필요`
+      : "잔액 부족";
   }
-  if (!state.cell) return "Move over the grid";
+  if (!state.cell) return "격자 위로 이동하세요";
   if (state.validity && !state.validity.valid) return validityText(state.validity);
-  return "VALID";
+  return "유효";
 }

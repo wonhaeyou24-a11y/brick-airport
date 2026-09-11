@@ -3,6 +3,7 @@ import type {
   OperationalEventData,
   OperationalEventType,
 } from "../core/GameState";
+import { formatMoney } from "../i18n/strings";
 
 /** What Game must act on after an operational-event tick. */
 export interface OperationalEventTick {
@@ -158,7 +159,7 @@ export class OperationalEventManager {
       e.elapsed += deltaTime;
       if (e.elapsed >= e.duration && e.progress < e.target) {
         e.state = "EXPIRED";
-        notices.push(`${EVENT_ICON[e.type]} ${e.title} expired`);
+        notices.push(`${EVENT_ICON[e.type]} ${e.title} 만료됨`);
       }
     }
   }
@@ -227,7 +228,7 @@ export class OperationalEventManager {
         this.hooks.grantMoney(e.rewardMoney);
         this.hooks.grantReputation(e.rewardReputation);
         notices.push(
-          `${EVENT_ICON[e.type]} ${e.title} resolved  +$${e.rewardMoney.toLocaleString("en-US")} · +${e.rewardReputation} rep`,
+          `${EVENT_ICON[e.type]} ${e.title} 해결됨  +${formatMoney(e.rewardMoney)} · 평판 +${e.rewardReputation}`,
         );
       }
     }

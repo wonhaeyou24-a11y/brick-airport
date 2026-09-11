@@ -3,7 +3,7 @@ import type { ServiceFacilityType } from "../core/GameState";
 import { Building } from "./Building";
 import { CELL_SIZE } from "../world/Grid";
 import { brickMaterial, COLORS } from "../world/materials";
-import { getBuildingConfig } from "./BuildingConfig";
+import { buildingLabel } from "./BuildingConfig";
 
 /**
  * ServiceFacility — one placeholder class for every small service / amenity
@@ -66,6 +66,6 @@ export class ServiceFacility extends Building {
   }
 
   getSelectionLabel(): string {
-    return getBuildingConfig(this.data.type).label;
+    return buildingLabel(this.data.type);
   }
 }

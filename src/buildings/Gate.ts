@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Building } from "./Building";
 import { brickMaterial, COLORS } from "../world/materials";
 import { createSignPost, createStud } from "../assets/AssetFactory";
+import { t } from "../i18n/strings";
 
 /**
  * Gate — brick-toy aircraft stand (V1.3-B upgrade of the V0.1 placeholder):
@@ -75,6 +76,6 @@ export class Gate extends Building {
   }
 
   getSelectionLabel(): string {
-    return "Gate";
+    return t("gate");
   }
 }

@@ -6,6 +6,7 @@ import {
   tagSelectable,
 } from "../selection/Selectable";
 import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
+import { CURRENT_LOCALE } from "../i18n/strings";
 
 /**
  * Passenger — brick-toy minifig, also a Selectable (V0.4-D; visual variety
@@ -96,7 +97,9 @@ export class Passenger implements Selectable {
   }
 
   getSelectionLabel(): string {
-    return `Passenger ${passengerLabel(this.data.id)}`;
+    return CURRENT_LOCALE === "ko"
+      ? `승객 ${passengerLabel(this.data.id)}`
+      : `Passenger ${passengerLabel(this.data.id)}`;
   }
 
   private build(): void {

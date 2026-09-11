@@ -1,4 +1,5 @@
 import type { GroundOperationType, StaffRole } from "../core/GameState";
+import { CURRENT_LOCALE, type Locale } from "../i18n/strings";
 
 /**
  * StaffConfig — tuning numbers for the V0.9 staff layer (spec §4).
@@ -105,8 +106,16 @@ export function staffRoleConfig(role: StaffRole): StaffRoleConfig {
   return STAFF_CONFIG.role[role];
 }
 
-export function staffRoleLabel(role: StaffRole): string {
-  return STAFF_CONFIG.role[role].label;
+/** Korean player-facing role names (V1.4-i18n) — kept beside the English `label`. */
+const STAFF_ROLE_KO: Record<StaffRole, string> = {
+  GROUND_AGENT: "지상 요원",
+  CLEANING_AGENT: "청소 요원",
+  FUEL_OPERATOR: "급유 요원",
+  BAGGAGE_AGENT: "수하물 요원",
+};
+
+export function staffRoleLabel(role: StaffRole, locale: Locale = CURRENT_LOCALE): string {
+  return locale === "ko" ? STAFF_ROLE_KO[role] : STAFF_CONFIG.role[role].label;
 }
 
 /** Multiplier applied to an operation's duration for a given staff skill. */

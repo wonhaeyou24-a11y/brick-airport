@@ -1,5 +1,6 @@
 import type { GameState, MissionData, MissionType } from "../core/GameState";
 import { isServiceFacility } from "../core/GameState";
+import { formatMoney } from "../i18n/strings";
 import {
   MAX_ACTIVE_MISSIONS,
   MISSION_POOL,
@@ -114,7 +115,7 @@ export class MissionManager {
         this.hooks.grantMoney(m.rewardMoney);
         this.hooks.grantReputation(m.rewardReputation);
         notices.push(
-          `🎯 Mission complete: ${m.title}  +$${m.rewardMoney.toLocaleString("en-US")} · +${m.rewardReputation} rep`,
+          `🎯 임무 완료: ${m.title}  +${formatMoney(m.rewardMoney)} · 평판 +${m.rewardReputation}`,
         );
       }
     }

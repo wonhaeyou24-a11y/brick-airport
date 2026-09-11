@@ -8,6 +8,7 @@ import {
 } from "../selection/Selectable";
 import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
 import { brickMaterial, COLORS } from "../world/materials";
+import { CURRENT_LOCALE } from "../i18n/strings";
 
 /** Distance (world units) at which a move target counts as reached. */
 const ARRIVE_EPSILON = 0.15;
@@ -246,7 +247,9 @@ export class Aircraft implements Selectable {
   }
 
   getSelectionLabel(): string {
-    return `Aircraft ${this.data.type}`;
+    return CURRENT_LOCALE === "ko"
+      ? `항공기 ${this.data.type}`
+      : `Aircraft ${this.data.type}`;
   }
 
   dispose(): void {

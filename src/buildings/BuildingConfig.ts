@@ -1,4 +1,5 @@
 import type { BuildingType } from "../core/GameState";
+import { CURRENT_LOCALE, type Locale } from "../i18n/strings";
 export { isServiceFacility } from "../core/GameState";
 export type { ServiceFacilityType } from "../core/GameState";
 
@@ -53,6 +54,25 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
 
 export function getBuildingConfig(type: BuildingType): BuildingConfig {
   return BUILDING_CONFIG[type];
+}
+
+/** Korean player-facing names (V1.4-i18n) — kept beside BUILDING_CONFIG.label (English). */
+const BUILDING_LABEL_KO: Record<BuildingType, string> = {
+  GATE: "게이트",
+  TERMINAL: "터미널",
+  RUNWAY: "활주로",
+  CHECK_IN: "체크인",
+  SECURITY: "보안검색",
+  BAGGAGE: "수하물",
+  LOUNGE: "라운지",
+  FOOD: "푸드코트",
+  RESTROOM: "화장실",
+  SHOP: "상점",
+};
+
+/** Locale-aware building name for the BuildMenu / selection HUD. */
+export function buildingLabel(type: BuildingType, locale: Locale = CURRENT_LOCALE): string {
+  return locale === "ko" ? BUILDING_LABEL_KO[type] : BUILDING_CONFIG[type].label;
 }
 
 /**

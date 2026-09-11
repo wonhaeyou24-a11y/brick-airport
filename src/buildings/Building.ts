@@ -8,6 +8,7 @@ import {
 } from "../selection/Selectable";
 import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
 import { footprintCenterToWorld } from "../world/Grid";
+import { buildingLabel } from "./BuildingConfig";
 
 /**
  * Building — base class for functional airport structures.
@@ -50,8 +51,7 @@ export abstract class Building implements Selectable {
   }
 
   getSelectionLabel(): string {
-    const t = this.data.type;
-    return t.charAt(0) + t.slice(1).toLowerCase();
+    return buildingLabel(this.data.type);
   }
 
   dispose(): void {

@@ -1,5 +1,6 @@
 import type { BuildingType } from "../core/GameState";
 import type { BuildModeState } from "../construction/BuildController";
+import { formatMoney, t } from "../i18n/strings";
 
 /**
  * BuildMenu — brick-style side panel for build mode.
@@ -95,10 +96,10 @@ export class BuildMenu {
     this.expansionCard.hidden = false;
     this.expandBtn.hidden = info.locked;
     this.expansionBody.innerHTML = info.locked
-      ? `<span class="exp-locked">LOCKED</span>` +
-        `<span class="exp-line">Required Airport Level ${info.requiredLevel}</span>`
+      ? `<span class="exp-locked">${t("locked")}</span>` +
+        `<span class="exp-line">공항 레벨 ${info.requiredLevel} 필요</span>`
       : `<span class="exp-line">${info.worldSize}&times;${info.worldSize}</span>` +
-        `<span class="exp-line">Cost $${info.cost.toLocaleString("en-US")}</span>`;
+        `<span class="exp-line">비용 ${formatMoney(info.cost)}</span>`;
   }
 
   /** Reflect BuildController state: highlight active type, show Cancel. */
@@ -122,7 +123,7 @@ export class BuildMenu {
       btn.classList.toggle("is-locked", locked);
       costEl.textContent = locked
         ? `🔒 Lv.${requiredLevel}`
-        : `$${cost.toLocaleString("en-US")}`;
+        : formatMoney(cost);
     }
   }
 
@@ -151,15 +152,15 @@ function template(types: readonly BuildMenuType[]): string {
     .join("");
 
   return /* html */ `
-  <button class="brick-btn build-toggle js-build-toggle" title="Build">BUILD</button>
+  <button class="brick-btn build-toggle js-build-toggle" title="${t("build")}">${t("build")}</button>
   <div class="build-list js-build-list" hidden>
     ${buttons}
     <div class="expansion-card js-expansion" hidden>
-      <div class="stat-panel-title">Airport Expansion</div>
+      <div class="stat-panel-title">${t("airportExpansion")}</div>
       <div class="expansion-body js-expansion-body"></div>
-      <button class="brick-btn expand-btn js-expand-btn">EXPAND</button>
+      <button class="brick-btn expand-btn js-expand-btn">${t("expand")}</button>
     </div>
-    <button class="brick-btn build-cancel js-build-cancel" hidden>Cancel</button>
+    <button class="brick-btn build-cancel js-build-cancel" hidden>${t("cancel")}</button>
   </div>
 `;
 }

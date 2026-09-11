@@ -653,6 +653,14 @@ body {
     min-height: 48px;
   }
 
+  /* Korean labels (저장/불러오기/격자/초기화) are wider than the English ones
+     this row was sized for — shrink the label instead of the tap target. */
+  .brick-btn.btn-reset {
+    font-size: 11px;
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+
   .build-menu {
     top: auto;
     /* clear the bottom HUD stack — taller since the Operations block (V0.7) */

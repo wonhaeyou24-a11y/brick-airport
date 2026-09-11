@@ -25,7 +25,7 @@ const saveManager = new SaveManager();
 let bootNotice: string | undefined;
 const initialData = saveManager.hasSave() ? saveManager.load() : null;
 if (saveManager.hasSave() && !initialData) {
-  bootNotice = "Save data could not be loaded.";
+  bootNotice = "저장 데이터를 불러올 수 없습니다.";
 }
 
 const game = new Game(canvas, hudContainer, initialData ?? undefined, bootNotice);
