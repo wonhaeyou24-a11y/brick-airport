@@ -78,6 +78,16 @@ import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
  * of truth, and all state / world mutation for a placed building funnels
  * through commitBuilding().
  */
+/** Periodic autosave interval, in accumulated game-seconds (spec §C.1). */
+const AUTOSAVE_INTERVAL = 60;
+/**
+ * Floor between an event-triggered save (mission/building/level/flight) and
+ * the previous save — event triggers only set `savePending`; this is what
+ * actually gates writing, so a burst of events in one frame never becomes a
+ * burst of saves (spec §C.2's "모든 프레임마다 저장하면 안 된다").
+ */
+const MIN_EVENT_SAVE_GAP = 20;
+
 export class Game {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;
@@ -103,6 +113,12 @@ export class Game {
   private readonly facilities: FacilityManager;
   private readonly saveManager = new SaveManager();
   private saveStatus: "IDLE" | "SAVED" | "ERROR" = "IDLE";
+  /** Game-seconds accumulated since the last save, of any kind (V1.2-C). */
+  private secondsSinceSave = 0;
+  /** An event (mission/building/level/flight) wants a save once the floor below is met. */
+  private savePending = false;
+  /** True for the duration of one save() call — a second save waits instead of overlapping. */
+  private saveInProgress = false;
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -196,7 +212,10 @@ export class Game {
 
     this.flightScheduler = new FlightScheduler(this.state, {
       spawnAircraft: (data) => this.aircraftManager.spawn(data),
-      onFlightCompleted: (flight) => this.operations.handleFlightCompleted(flight),
+      onFlightCompleted: (flight) => {
+        this.operations.handleFlightCompleted(flight);
+        this.requestEventSave();
+      },
     });
 
     this.passengerManager = new PassengerManager(
@@ -289,10 +308,42 @@ export class Game {
    * async backend would need, so callers don't have to change later.
    */
   save(): boolean {
+    if (this.saveInProgress) {
+      this.savePending = true;
+      return false;
+    }
+    this.saveInProgress = true;
     const result = this.saveManager.save(this.state.data);
+    this.saveInProgress = false;
     this.saveStatus = result.ok ? "SAVED" : "ERROR";
+    this.secondsSinceSave = 0;
     if (!result.ok) this.hud.showNotice("Save failed — previous save kept.");
     return result.ok;
+  }
+
+  /**
+   * Autosave heartbeat (V1.2-C) — called once per Game.update(). Fires on the
+   * fixed interval, or sooner when an event set `savePending` and the min gap
+   * since the last save has already elapsed. Never runs more than once per
+   * MIN_EVENT_SAVE_GAP seconds, so a burst of events never becomes a burst of
+   * writes (spec §C.2, §23 — no per-frame save/stringify).
+   */
+  private tickAutosave(deltaTime: number): void {
+    this.secondsSinceSave += deltaTime;
+    if (this.secondsSinceSave >= AUTOSAVE_INTERVAL) {
+      this.save();
+      this.savePending = false;
+      return;
+    }
+    if (this.savePending && this.secondsSinceSave >= MIN_EVENT_SAVE_GAP) {
+      this.save();
+      this.savePending = false;
+    }
+  }
+
+  /** A meaningful event happened — ask for a save, subject to the min gap above. */
+  private requestEventSave(): void {
+    this.savePending = true;
   }
 
   /**
@@ -385,6 +436,7 @@ export class Game {
     if (data.type === "GATE") this.state.addGateForBuilding(data);
     if (isServiceFacility(data.type)) this.operations.recomputeServiceScore();
     this.refreshHudStats();
+    if (charge) this.requestEventSave(); // a free console placeBuilding() doesn't count
     return true;
   }
 
@@ -911,6 +963,7 @@ export class Game {
     // Missions: keep the objective queue filled, track progress, pay rewards.
     const missionTick = this.missions.update(deltaTime);
     for (const notice of missionTick.notices) this.hud.showNotice(notice);
+    if (missionTick.notices.length > 0) this.requestEventSave();
 
     // Operational events: raise/track/resolve the short operating prompts.
     const eventTick = this.operationalEvents.update(deltaTime);
@@ -919,6 +972,9 @@ export class Game {
     // Facility effects: recompute only when the building list actually
     // changed (signature-gated inside FacilityManager itself).
     this.facilities.update();
+
+    // Autosave heartbeat (V1.2-C).
+    this.tickAutosave(deltaTime);
 
     this.refreshProgression();
     this.refreshSelectionHud();
@@ -1087,6 +1143,7 @@ export class Game {
     a.level = target;
     this.hud.showNotice(`Airport Level ${target}! New buildings available.`);
     this.refreshHudStats();
+    this.requestEventSave();
   }
 
   /** Push cost / lock state to the BuildMenu when level or money changes. */
