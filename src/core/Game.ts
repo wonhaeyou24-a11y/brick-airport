@@ -746,7 +746,7 @@ export class Game {
             `${t("status")}: ${stateLabel(flight.state)}${flight.delayed ? " ⚠ 지연" : ""}`,
           );
         }
-        lines.push(`${t("state")}: ${stateLabel(a.state)}`);
+        lines.push(`${t("aircraftState")}: ${stateLabel(a.state)}`);
         lines.push(`${t("gate")}: ${a.homeGateId ? gateName(a.homeGateId) : "—"}`);
         const board = this.state.getAircraftBoarding(a.id);
         if (board.total > 0) {

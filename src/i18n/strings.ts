@@ -85,6 +85,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   route: { ko: "노선", en: "Route" },
   status: { ko: "상태", en: "Status" },
   state: { ko: "상태", en: "State" },
+  aircraftState: { ko: "항공기 상태", en: "Aircraft State" },
   progress: { ko: "진행", en: "Progress" },
   operation: { ko: "작업", en: "Operation" },
   role: { ko: "역할", en: "Role" },
