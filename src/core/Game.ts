@@ -38,6 +38,7 @@ import { computeAirportLevel } from "../progression/AirportProgression";
 import { OperationsManager } from "../operations/OperationsManager";
 import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { MissionManager } from "../missions/MissionManager";
+import { OperationalEventManager } from "../events/OperationalEventManager";
 import {
   TURNAROUND_SEQUENCE,
   operationGlyph,
@@ -93,6 +94,7 @@ export class Game {
   private readonly operations: OperationsManager;
   private readonly groundOps: GroundOperationManager;
   private readonly missions: MissionManager;
+  private readonly operationalEvents: OperationalEventManager;
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -187,6 +189,10 @@ export class Game {
       this.staffManager,
     );
     this.missions = new MissionManager(this.state, {
+      grantMoney: (n) => this.economy.grantReward(n),
+      grantReputation: (n) => this.operations.grantReputation(n),
+    });
+    this.operationalEvents = new OperationalEventManager(this.state, {
       grantMoney: (n) => this.economy.grantReward(n),
       grantReputation: (n) => this.operations.grantReputation(n),
     });
@@ -820,6 +826,10 @@ export class Game {
     // Missions: keep the objective queue filled, track progress, pay rewards.
     const missionTick = this.missions.update(deltaTime);
     for (const notice of missionTick.notices) this.hud.showNotice(notice);
+
+    // Operational events: raise/track/resolve the short operating prompts.
+    const eventTick = this.operationalEvents.update(deltaTime);
+    for (const notice of eventTick.notices) this.hud.showNotice(notice);
 
     this.refreshProgression();
     this.refreshSelectionHud();
