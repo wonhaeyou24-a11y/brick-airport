@@ -45,7 +45,6 @@ import {
   TURNAROUND_SEQUENCE,
   operationGlyph,
 } from "../operations/GroundOperation";
-import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
@@ -55,7 +54,8 @@ import {
   staffRoleConfig,
   staffRoleLabel,
 } from "../staff/StaffConfig";
-import { jitterFromId } from "../operations/AirportOperations";
+import { jitterFromId, experienceLabel } from "../operations/AirportOperations";
+import { getFacilityEffect } from "../buildings/FacilityConfig";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
 import { Economy } from "../economy/Economy";
@@ -593,6 +593,10 @@ export class Game {
         lines.push(`Gate: ${p.gateId ? gateName(p.gateId) : "—"}`);
         if (p.satisfaction !== undefined) {
           lines.push(`Satisfaction: ${p.satisfaction}`);
+          lines.push(`Experience: ${experienceLabel(p.satisfaction)}`);
+          if (p.waitingSeconds !== undefined) {
+            lines.push(`Waiting: ${p.waitingSeconds}s`);
+          }
         }
       }
       return { title: s.getSelectionLabel(), lines };
@@ -635,16 +639,29 @@ export class Game {
     }
     if (b && isServiceFacility(b.type)) {
       const cfg = getBuildingConfig(b.type);
-      const svc = OPERATIONS_CONFIG.serviceBonusPerFacility[b.type] ?? 0;
-      const sat = OPERATIONS_CONFIG.satisfactionBonusPerFacility[b.type] ?? 0;
+      const effect = getFacilityEffect(b.type);
       const built = this.state.countBuildingsByType(b.type);
+      const lines = ["Facility", `Level ${b.level}`];
+      if (effect.passengerCapacity) lines.push(`Capacity ${effect.passengerCapacity}`);
+      lines.push(`Comfort +${effect.comfort ?? 0} · Service +${effect.service ?? 0}`);
+      lines.push(built > 1 ? `${built} built (stacked bonus reduced)` : "1 built");
+      return { title: cfg.label, lines };
+    }
+    if (b && b.type === "TERMINAL") {
+      const effect = getFacilityEffect(b.type);
+      const built = this.state.countBuildingsByType("TERMINAL");
+      const capacity = (effect.passengerCapacity ?? 0) * built;
+      const inTerminal = this.state.data.passengers.filter((p) =>
+        TERMINAL_PASSENGER_STATES.has(p.state),
+      ).length;
       return {
-        title: cfg.label,
+        title: "Terminal",
         lines: [
-          "Service facility",
+          "Facility",
           `Level ${b.level}`,
-          `Service +${svc} · Satisfaction +${sat}`,
-          built > 1 ? `${built} built (stacked bonus reduced)` : "1 built",
+          `Capacity ${capacity}`,
+          `Comfort +${effect.comfort ?? 0} · Service +${effect.service ?? 0}`,
+          `Passengers ${inTerminal} / ${capacity}`,
         ],
       };
     }
@@ -1134,6 +1151,13 @@ function flightProgressLine(state: FlightState): string {
 function formatCount(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
+
+/** Passenger states that count as "in the terminal" for the Facility HUD (V1.1-E). */
+const TERMINAL_PASSENGER_STATES: ReadonlySet<string> = new Set([
+  "TO_TERMINAL",
+  "CHECK_IN",
+  "TO_TERMINAL_AFTER_ARRIVAL",
+]);
 
 const OPERATIONAL_EVENT_ICON: Record<OperationalEventType, string> = {
   PASSENGER_SURGE: "👥",
