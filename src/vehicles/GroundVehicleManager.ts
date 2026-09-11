@@ -51,7 +51,10 @@ export class GroundVehicleManager {
       this.stepMovement(data, deltaTime);
       this.advancePath(data);
     }
-    for (const vehicle of this.vehicles.values()) vehicle.syncFromData();
+    for (const vehicle of this.vehicles.values()) {
+      vehicle.syncFromData();
+      vehicle.tickAnimation();
+    }
   }
 
   /**

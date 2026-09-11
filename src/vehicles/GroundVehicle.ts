@@ -65,6 +65,9 @@ export class GroundVehicle implements Selectable {
   readonly data: GroundVehicleData;
 
   private readonly tmpDir = new THREE.Vector3();
+  private readonly wheels: THREE.Mesh[] = [];
+  private readonly lastPos = new THREE.Vector3();
+  private wheelSpin = 0;
 
   constructor(data: GroundVehicleData) {
     this.data = data;
@@ -75,6 +78,7 @@ export class GroundVehicle implements Selectable {
     this.build();
     tagSelectable(this.object, this);
     this.syncFromData();
+    this.lastPos.copy(this.object.position);
   }
 
   private build(): void {
@@ -116,8 +120,44 @@ export class GroundVehicle implements Selectable {
         wheel.rotation.z = Math.PI / 2;
         wheel.position.set(sx * (w / 2 - 0.05), 0.16, sz * (l / 2 - 0.3));
         this.object.add(wheel);
+        this.wheels.push(wheel);
       }
     }
+
+    // Role-specific detail (spec §16), on top of the shared body/cab/wheels.
+    const detailMat = brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.2 });
+    if (this.data.type === "FUEL_TRUCK") {
+      // Hose reel + nozzle at the rear.
+      const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 10), detailMat);
+      reel.rotation.z = Math.PI / 2;
+      reel.position.set(0, h * 0.6 + 0.12, -l / 2 + 0.1);
+      this.object.add(reel);
+      const hose = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6), detailMat);
+      hose.rotation.x = Math.PI / 2.6;
+      hose.position.set(0, h * 0.35 + 0.12, -l / 2 - 0.3);
+      this.object.add(hose);
+    } else if (this.data.type === "CLEANING_VEHICLE") {
+      const equipment = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.2, 0.3), detailMat);
+      equipment.position.set(0, h + 0.12, -l / 4);
+      this.object.add(equipment);
+    } else if (this.data.type === "SERVICE_VEHICLE") {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.3, 0.4), detailMat);
+      box.position.set(0, h + 0.15, -l / 4);
+      this.object.add(box);
+    }
+  }
+
+  /**
+   * Cosmetic wheel spin, scaled by how far the vehicle actually moved this
+   * frame — purely visual, never touches GroundVehicleData (spec §16/§31).
+   */
+  tickAnimation(): void {
+    const p = this.object.position;
+    const moved = p.distanceTo(this.lastPos);
+    this.lastPos.copy(p);
+    if (moved <= 0) return;
+    this.wheelSpin += moved * 4;
+    for (const wheel of this.wheels) wheel.rotation.x = this.wheelSpin;
   }
 
   /** Mirror data.position onto the group and face the travel direction. */

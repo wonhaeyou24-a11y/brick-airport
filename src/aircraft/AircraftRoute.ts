@@ -80,6 +80,10 @@ export class AircraftRoute {
   tick(deltaTime: number): void {
     if (this.phase === "DWELL") {
       this.dwellTimer -= deltaTime;
+      // craft.update() no-ops on movement while targetPosition is null (true
+      // throughout DWELL) and only advances cosmetic animation (V1.3-C) —
+      // the dwell/departure gating below is completely unchanged.
+      this.craft.update(deltaTime);
       // Wait out the dwell AND hold until every departure passenger has boarded
       // (V0.3) AND until the turnaround ground operations are done (V0.8-C).
       // Both helpers return true when there is nothing to wait for, so earlier

@@ -12,12 +12,39 @@ import { brickMaterial, COLORS } from "../world/materials";
 /** Distance (world units) at which a move target counts as reached. */
 const ARRIVE_EPSILON = 0.15;
 
+/** Visual size variant, chosen only from AircraftData.capacity (spec §12 — never from `type`). */
+type AircraftVariant = "SMALL" | "MEDIUM" | "LARGE";
+
+function variantFor(capacity: number): AircraftVariant {
+  if (capacity <= 4) return "SMALL";
+  if (capacity <= 8) return "MEDIUM";
+  return "LARGE";
+}
+
+interface VariantSpec {
+  scale: number;
+  engineCount: number;
+}
+
+const VARIANT_SPEC: Record<AircraftVariant, VariantSpec> = {
+  SMALL: { scale: 0.8, engineCount: 1 },
+  MEDIUM: { scale: 1.0, engineCount: 2 },
+  LARGE: { scale: 1.25, engineCount: 2 },
+};
+
+/** Seconds a full blink cycle (on+off) takes for the tail beacon. */
+const BLINK_PERIOD = 1.4;
+/** Radians/sec the engine fan discs spin — purely cosmetic (spec §13). */
+const ENGINE_SPIN_SPEED = 14;
+
 /**
- * Aircraft — placeholder plane + thin movement helper.
+ * Aircraft — brick-toy plane + thin movement helper.
  *
  * The plane faces local +X ("nose" direction). All authoritative values live
  * in the referenced AircraftData; this class writes position/heading back to
- * it each frame and mirrors them onto the Three.js group.
+ * it each frame and mirrors them onto the Three.js group (unchanged from
+ * V0.2 — V1.3 only enriches buildPlaceholder() and adds cosmetic-only
+ * animation that never touches `data`, per spec §13/§31).
  */
 export class Aircraft implements Selectable {
   readonly id: string;
@@ -27,6 +54,11 @@ export class Aircraft implements Selectable {
 
   private readonly tmpTarget = new THREE.Vector3();
   private readonly tmpDir = new THREE.Vector3();
+
+  private readonly engines: THREE.Mesh[] = [];
+  private readonly gear: THREE.Mesh[] = [];
+  private beaconMat: THREE.MeshStandardMaterial | null = null;
+  private animClock = 0;
 
   constructor(data: AircraftData) {
     this.data = data;
@@ -42,54 +74,103 @@ export class Aircraft implements Selectable {
     tagSelectable(this.object, this);
   }
 
-  /** Simple brick-built silhouette: fuselage + wings + tail + cockpit. */
+  /** Brick-built silhouette: fuselage + wings + tail + cockpit + engines + gear. */
   private buildPlaceholder(group: THREE.Group): void {
+    const variant = variantFor(this.data.capacity ?? 6);
+    const spec = VARIANT_SPEC[variant];
+    const s = spec.scale;
+
     const fuselage = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35, 0.35, 3.4, 12),
+      new THREE.CylinderGeometry(0.35 * s, 0.35 * s, 3.4 * s, 12),
       brickMaterial(COLORS.aircraftBody, { roughness: 0.4 }),
     );
     fuselage.rotation.z = Math.PI / 2; // lie along X
-    fuselage.position.y = 0.7;
+    fuselage.position.y = 0.7 * s;
     fuselage.castShadow = true;
     group.add(fuselage);
 
     const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35, 0.7, 12),
+      new THREE.ConeGeometry(0.35 * s, 0.7 * s, 12),
       brickMaterial(COLORS.aircraftBody, { roughness: 0.4 }),
     );
     nose.rotation.z = -Math.PI / 2;
-    nose.position.set(2.05, 0.7, 0);
+    nose.position.set(2.05 * s, 0.7 * s, 0);
     group.add(nose);
 
     const wing = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.12, 4.6),
+      new THREE.BoxGeometry(1.1 * s, 0.12 * s, 4.6 * s),
       brickMaterial(COLORS.aircraftWing, { roughness: 0.5 }),
     );
-    wing.position.set(0, 0.7, 0);
+    wing.position.set(0, 0.7 * s, 0);
     wing.castShadow = true;
     group.add(wing);
 
     const tailplane = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.1, 1.9),
+      new THREE.BoxGeometry(0.7 * s, 0.1 * s, 1.9 * s),
       brickMaterial(COLORS.aircraftWing, { roughness: 0.5 }),
     );
-    tailplane.position.set(-1.5, 0.9, 0);
+    tailplane.position.set(-1.5 * s, 0.9 * s, 0);
     group.add(tailplane);
 
     const fin = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 1.1, 0.12),
+      new THREE.BoxGeometry(0.7 * s, 1.1 * s, 0.12 * s),
       brickMaterial(COLORS.aircraftTail, { roughness: 0.5 }),
     );
-    fin.position.set(-1.5, 1.4, 0);
+    fin.position.set(-1.5 * s, 1.4 * s, 0);
     fin.castShadow = true;
     group.add(fin);
 
     const cockpit = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 12, 8),
+      new THREE.SphereGeometry(0.3 * s, 12, 8),
       brickMaterial(COLORS.aircraftCockpit, { roughness: 0.2, metalness: 0.1 }),
     );
-    cockpit.position.set(1.4, 0.95, 0);
+    cockpit.position.set(1.4 * s, 0.95 * s, 0);
     group.add(cockpit);
+
+    // Engine pods under the wings, one fan disc per pod (spec §12/§13).
+    const engineMat = brickMaterial(0x2b2f3a, { roughness: 0.4, metalness: 0.3 });
+    const fanMat = brickMaterial(0x8d99ae, { roughness: 0.5, metalness: 0.4 });
+    const engineZs =
+      spec.engineCount === 1
+        ? [0]
+        : [-1.4 * s, 1.4 * s];
+    for (const ez of engineZs) {
+      const pod = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16 * s, 0.16 * s, 0.7 * s, 10),
+        engineMat,
+      );
+      pod.rotation.z = Math.PI / 2;
+      pod.position.set(0.1 * s, 0.35 * s, ez);
+      group.add(pod);
+
+      const fan = new THREE.Mesh(new THREE.CircleGeometry(0.15 * s, 8), fanMat);
+      fan.position.set(0.1 * s + 0.36 * s, 0.35 * s, ez);
+      fan.rotation.y = Math.PI / 2;
+      group.add(fan);
+      this.engines.push(fan);
+    }
+
+    // Landing gear — small dark stubs, hidden while FLYING (spec §13's
+    // "landing gear transition"). Purely a read of the existing AircraftState
+    // for display; it never writes back to `data`.
+    const gearMat = brickMaterial(0x22333b, { roughness: 0.6 });
+    const gearPositions: [number, number, number][] = [
+      [0.9 * s, 0, 0],
+      [-0.6 * s, 0, 0.5 * s],
+      [-0.6 * s, 0, -0.5 * s],
+    ];
+    for (const [gx, , gz] of gearPositions) {
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5 * s, 6), gearMat);
+      strut.position.set(gx, 0.25 * s, gz);
+      group.add(strut);
+      this.gear.push(strut);
+    }
+
+    // Tail beacon — blinks (spec §13).
+    this.beaconMat = brickMaterial(0xe63946, { roughness: 0.3 }).clone();
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 8, 6), this.beaconMat);
+    beacon.position.set(-1.5 * s, 1.95 * s, 0);
+    group.add(beacon);
   }
 
   /** Point the aircraft at a world position and start taxiing toward it. */
@@ -97,8 +178,14 @@ export class Aircraft implements Selectable {
     this.data.targetPosition = { x: target.x, y: target.y, z: target.z };
   }
 
-  /** Advance movement. Returns true on the frame the target is reached. */
+  /**
+   * Advance movement AND cosmetic-only animation. `data.position`/`heading`
+   * are still the sole output of the movement branch below — animation only
+   * ever touches child-mesh local transforms (spec §31).
+   */
   update(deltaTime: number): boolean {
+    this.tickAnimation(deltaTime);
+
     const { data } = this;
     if (!data.targetPosition) return false;
 
@@ -138,6 +225,22 @@ export class Aircraft implements Selectable {
     return false;
   }
 
+  /** Engine spin, gear retraction, beacon blink — reads data.state, never writes it. */
+  private tickAnimation(deltaTime: number): void {
+    this.animClock += deltaTime;
+
+    for (const fan of this.engines) fan.rotation.z += ENGINE_SPIN_SPEED * deltaTime;
+
+    const gearDown = this.data.state !== "FLYING";
+    for (const strut of this.gear) strut.visible = gearDown;
+
+    if (this.beaconMat) {
+      const phase = (this.animClock % BLINK_PERIOD) / BLINK_PERIOD;
+      this.beaconMat.emissive = new THREE.Color(0xe63946);
+      this.beaconMat.emissiveIntensity = phase < 0.5 ? 1 : 0.15;
+    }
+  }
+
   setHighlighted(highlighted: boolean): void {
     setEmissiveHighlight(this.object, highlighted);
   }
@@ -148,6 +251,7 @@ export class Aircraft implements Selectable {
 
   dispose(): void {
     disposeHighlight(this.object);
+    this.beaconMat?.dispose();
     disposeObject(this.object);
   }
 }
