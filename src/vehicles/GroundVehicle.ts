@@ -100,31 +100,76 @@ export class GroundVehicle implements Selectable {
   private build(): void {
     const spec = SPEC[this.data.type];
     const [w, h, l] = spec.body;
+    const type = this.data.type;
+    const bodyMat = brickMaterial(spec.color, { roughness: 0.6 });
 
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, l),
-      brickMaterial(spec.color, { roughness: 0.6 }),
-    );
-    body.position.y = h / 2 + 0.12;
-    body.castShadow = true;
-    this.object.add(body);
+    // FUEL_TRUCK gets a real cylindrical tank instead of the shared box body
+    // (spec: "유조 탱크 모듈 탑재") — every other type keeps the box body.
+    if (type === "FUEL_TRUCK") {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(h / 2, h / 2, l, 12), bodyMat);
+      tank.rotation.z = Math.PI / 2;
+      tank.position.y = h / 2 + 0.12;
+      tank.castShadow = true;
+      this.object.add(tank);
+      // End caps so the cylinder doesn't read as an open pipe.
+      const capMat = brickMaterial(0xdfe4ea, { roughness: 0.4, metalness: 0.2 });
+      for (const sz of [-1, 1]) {
+        const cap = new THREE.Mesh(new THREE.CircleGeometry(h / 2, 12), capMat);
+        cap.rotation.y = Math.PI / 2;
+        cap.position.set(0, h / 2 + 0.12, (sz * l) / 2);
+        this.object.add(cap);
+      }
+    } else {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), bodyMat);
+      body.position.y = h / 2 + 0.12;
+      body.castShadow = true;
+      this.object.add(body);
+    }
 
-    // Little cab at the nose (local +Z is "forward").
-    const cab = new THREE.Mesh(
-      new THREE.BoxGeometry(w * 0.8, h * 0.7, 0.5),
-      brickMaterial(COLORS.vehicleCab, { roughness: 0.4 }),
-    );
-    cab.position.set(0, h * 0.7 + 0.12, l / 2 - 0.2);
-    this.object.add(cab);
+    // BAGGAGE_CART has an open tug seat (no cab/windshield) since it tows a
+    // train of carts, not a closed truck cab (spec: "오픈형 운전석").
+    if (type === "BAGGAGE_CART") {
+      const seatMat = brickMaterial(COLORS.vehicleCab, { roughness: 0.5 });
+      const seatBack = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, h * 0.5, 0.08), seatMat);
+      seatBack.position.set(0, h * 0.85 + 0.12, l / 2 - 0.1);
+      this.object.add(seatBack);
+      const steeringPost = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, h * 0.4, 6),
+        seatMat,
+      );
+      steeringPost.position.set(0, h * 0.9 + 0.12, l / 2 - 0.02);
+      this.object.add(steeringPost);
+    } else {
+      // Little cab at the nose (local +Z is "forward").
+      const cab = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.8, h * 0.7, 0.5),
+        brickMaterial(COLORS.vehicleCab, { roughness: 0.4 }),
+      );
+      cab.position.set(0, h * 0.7 + 0.12, l / 2 - 0.2);
+      this.object.add(cab);
 
-    // Windshield — reads as an actual driver's cab rather than a plain box
-    // (V2.0 §16's "Cab" detail).
-    const windshield = new THREE.Mesh(
-      new THREE.BoxGeometry(w * 0.72, h * 0.32, 0.06),
-      brickMaterial(COLORS.terminalGlass, { roughness: 0.2, metalness: 0.15 }),
-    );
-    windshield.position.set(0, h * 0.85 + 0.12, l / 2 + 0.04);
-    this.object.add(windshield);
+      // Windshield — reads as an actual driver's cab rather than a plain box
+      // (V2.0 §16's "Cab" detail).
+      const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.72, h * 0.32, 0.06),
+        brickMaterial(COLORS.terminalGlass, { roughness: 0.2, metalness: 0.15 }),
+      );
+      windshield.position.set(0, h * 0.85 + 0.12, l / 2 + 0.04);
+      this.object.add(windshield);
+
+      // CLEANING_VEHICLE additionally gets a side window band, nudging it
+      // toward a small utility-van silhouette rather than a bare box body.
+      if (type === "CLEANING_VEHICLE") {
+        for (const sx of [-1, 1]) {
+          const sideWindow = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, h * 0.28, l * 0.5),
+            brickMaterial(COLORS.terminalGlass, { roughness: 0.2, metalness: 0.15 }),
+          );
+          sideWindow.position.set((sx * w) / 2, h * 0.62 + 0.12, -l * 0.05);
+          this.object.add(sideWindow);
+        }
+      }
+    }
 
     // Rooftop amber beacon — a common airport-service-vehicle cue (spec §16).
     this.beaconMat = brickMaterial(0xffb703, { roughness: 0.3 }).clone();
@@ -133,32 +178,46 @@ export class GroundVehicle implements Selectable {
     beacon.position.set(0, h * 1.15 + 0.12, l / 2 - 0.2);
     this.object.add(beacon);
 
+    // BAGGAGE_CART tows two chained trailer cars (a real "cart train"
+    // silhouette) instead of one; every other type keeps no trailer.
     if (spec.trailer) {
       const [tw, th, tl] = spec.trailer;
-      const trailer = new THREE.Mesh(
-        new THREE.BoxGeometry(tw, th, tl),
-        brickMaterial(spec.color, { roughness: 0.7 }),
-      );
-      trailer.position.set(0, th / 2 + 0.12, -l / 2 - tl / 2 - 0.15);
-      this.object.add(trailer);
-    }
-
-    // Wheels — four dark stubs so it reads as a vehicle from the iso view.
-    const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.16, 8);
-    const wheelMat = brickMaterial(COLORS.vehicleCab, { roughness: 0.9 });
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(sx * (w / 2 - 0.05), 0.16, sz * (l / 2 - 0.3));
-        this.object.add(wheel);
-        this.wheels.push(wheel);
+      const trailerCount = type === "BAGGAGE_CART" ? 2 : 1;
+      for (let i = 0; i < trailerCount; i++) {
+        const trailer = new THREE.Mesh(
+          new THREE.BoxGeometry(tw, th, tl),
+          brickMaterial(spec.color, { roughness: 0.7 }),
+        );
+        const gap = 0.12;
+        trailer.position.set(0, th / 2 + 0.12, -l / 2 - tl / 2 - gap - i * (tl + gap));
+        this.object.add(trailer);
       }
     }
 
+    // Wheels — dark stubs with a fender arch so it reads as a vehicle from
+    // the iso view; extra rear pair under each baggage trailer.
+    const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.16, 8);
+    const wheelMat = brickMaterial(COLORS.vehicleCab, { roughness: 0.9 });
+    const fenderMat = brickMaterial(0x2b2f3a, { roughness: 0.6 });
+    const addWheelPair = (wz: number) => {
+      for (const sx of [-1, 1]) {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(sx * (w / 2 - 0.05), 0.16, wz);
+        this.object.add(wheel);
+        this.wheels.push(wheel);
+
+        const fender = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.24), fenderMat);
+        fender.position.set(sx * (w / 2 - 0.05), 0.27, wz);
+        this.object.add(fender);
+      }
+    };
+    addWheelPair(l / 2 - 0.3);
+    addWheelPair(-(l / 2 - 0.3));
+
     // Role-specific detail (spec §16), on top of the shared body/cab/wheels.
     const detailMat = brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.2 });
-    if (this.data.type === "FUEL_TRUCK") {
+    if (type === "FUEL_TRUCK") {
       // Hose reel + nozzle at the rear.
       const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 10), detailMat);
       reel.rotation.z = Math.PI / 2;
@@ -168,14 +227,19 @@ export class GroundVehicle implements Selectable {
       hose.rotation.x = Math.PI / 2.6;
       hose.position.set(0, h * 0.35 + 0.12, -l / 2 - 0.3);
       this.object.add(hose);
-    } else if (this.data.type === "CLEANING_VEHICLE") {
+    } else if (type === "CLEANING_VEHICLE") {
       const equipment = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.2, 0.3), detailMat);
       equipment.position.set(0, h + 0.12, -l / 4);
       this.object.add(equipment);
-    } else if (this.data.type === "SERVICE_VEHICLE") {
-      const box = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.3, 0.4), detailMat);
-      box.position.set(0, h + 0.15, -l / 4);
-      this.object.add(box);
+    } else if (type === "SERVICE_VEHICLE") {
+      // Heavier, low-slung tow-tug read: a wide front bumper block plus a
+      // toolbox, instead of just a roof box (spec: "낮고 묵직한 중장비 형태").
+      const bumper = new THREE.Mesh(new THREE.BoxGeometry(w * 1.05, h * 0.35, 0.18), detailMat);
+      bumper.position.set(0, h * 0.2 + 0.12, l / 2 + 0.08);
+      this.object.add(bumper);
+      const toolbox = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.3, 0.4), detailMat);
+      toolbox.position.set(0, h + 0.15, -l / 4);
+      this.object.add(toolbox);
     }
   }
 

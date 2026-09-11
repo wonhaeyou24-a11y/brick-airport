@@ -34,19 +34,25 @@ const BODY_COLORS = [
 const HAIR_COLORS = [0x2b2118, 0x6b4423, 0xf2c14e, 0x1c1c1c, 0xdedede];
 
 const sharedGeo = {
-  head: new THREE.BoxGeometry(0.34, 0.32, 0.34),
+  // Rounded head (was a box) — a friendlier minifig silhouette. Deliberately
+  // kept at varied skin tones below rather than a uniform bright yellow: a
+  // solid-yellow round head is LEGO's single most recognizable proprietary
+  // design cue, and this project's own rule is an original brick-toy look,
+  // not a copy of it (spec §35/CLAUDE.md §1).
+  head: new THREE.SphereGeometry(0.2, 12, 9),
   body: new THREE.BoxGeometry(0.42, 0.5, 0.28),
   limb: new THREE.BoxGeometry(0.12, 0.44, 0.12),
   bag: new THREE.BoxGeometry(0.24, 0.26, 0.18),
-  hair: new THREE.BoxGeometry(0.36, 0.1, 0.36),
+  hair: new THREE.SphereGeometry(0.21, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.6),
   hat: new THREE.CylinderGeometry(0.24, 0.24, 0.08, 12),
   suitcase: new THREE.BoxGeometry(0.16, 0.3, 0.22),
 };
 
-const headMat = new THREE.MeshStandardMaterial({
-  color: 0xffcc99,
-  roughness: 0.75,
-});
+/** Skin-tone variants, a second independent axis from BODY_COLORS/HAIR_COLORS. */
+const SKIN_TONES = [0xffcc99, 0xe0a878, 0x8d5a3c, 0xf5dcc0];
+const headMats = SKIN_TONES.map(
+  (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 }),
+);
 const limbMat = new THREE.MeshStandardMaterial({
   color: 0x394050,
   roughness: 0.8,
@@ -106,6 +112,7 @@ export class Passenger implements Selectable {
     const idx = this.data.colorIndex;
     const bodyMat = bodyMats[idx % bodyMats.length];
     const hairMat = hairMats[Math.floor(idx / 2) % hairMats.length];
+    const headMat = headMats[Math.floor(idx / 3) % headMats.length];
     const wearsHat = idx % 3 === 0;
     const hasSuitcase = idx % 4 === 0;
 
@@ -120,13 +127,15 @@ export class Passenger implements Selectable {
     this.object.add(head);
 
     // Hair or a simple sun hat — deterministic per passenger (spec §14).
+    // Hair is a partial-sphere cap sharing the head's own center, so it
+    // reads as a rounded hairstyle sitting on the rounded head.
     if (wearsHat) {
       const hat = new THREE.Mesh(sharedGeo.hat, hatMat);
       hat.position.y = 1.23;
       this.object.add(hat);
     } else {
       const hair = new THREE.Mesh(sharedGeo.hair, hairMat);
-      hair.position.y = 1.22;
+      hair.position.y = 1.03;
       this.object.add(hair);
     }
 
@@ -206,7 +215,7 @@ function passengerLabel(id: string): string {
 /** Free the module-level shared passenger resources (called on teardown). */
 export function disposePassengerResources(): void {
   for (const g of Object.values(sharedGeo)) g.dispose();
-  headMat.dispose();
+  for (const m of headMats) m.dispose();
   limbMat.dispose();
   bagMat.dispose();
   hatMat.dispose();

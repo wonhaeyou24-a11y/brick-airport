@@ -6,6 +6,7 @@ import { ServiceRoad } from "./ServiceRoad";
 import { Taxiway } from "./Taxiway";
 import { Apron } from "./Apron";
 import { AirportProps } from "./AirportProps";
+import { DecorationManager } from "./DecorationManager";
 import { disposePaletteCache } from "./materials";
 import { Building } from "../buildings/Building";
 import { Runway } from "../buildings/Runway";
@@ -45,6 +46,7 @@ export class AirportWorld {
   private readonly taxiway: Taxiway;
   private readonly apron: Apron;
   private readonly props: AirportProps;
+  private readonly decorations: DecorationManager;
   private readonly buildings: Building[] = [];
   /** Buildings mid pop-in-scale animation (V1.9 §14) — empty almost always;
    * only ever grows right after a runtime addBuilding() call. */
@@ -71,6 +73,9 @@ export class AirportWorld {
 
     this.props = new AirportProps();
     this.group.add(this.props.object);
+
+    this.decorations = new DecorationManager();
+    this.group.add(this.decorations.object);
 
     for (const data of state.data.buildings) {
       const building = createBuilding(data);
@@ -145,6 +150,7 @@ export class AirportWorld {
     this.apron.dispose();
     this.taxiway.dispose();
     this.props.dispose();
+    this.decorations.dispose();
     this.grid.dispose();
     this.ground.dispose();
     disposePaletteCache();

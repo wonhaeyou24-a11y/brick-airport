@@ -19,17 +19,21 @@ import { staffRoleLabel } from "./StaffConfig";
  */
 
 const geo = {
-  head: new THREE.BoxGeometry(0.34, 0.32, 0.34),
-  cap: new THREE.BoxGeometry(0.38, 0.12, 0.38),
+  // Rounded head, matching Passenger.ts's minifig update (kept off a
+  // uniform LEGO-yellow to stay an original design, per CLAUDE.md §1).
+  head: new THREE.SphereGeometry(0.2, 12, 9),
+  // Safety helmet — a rounded dome instead of a flat cap slab, reading as
+  // real ground-crew PPE (spec: "헬멧/안전모").
+  cap: new THREE.SphereGeometry(0.22, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
   body: new THREE.BoxGeometry(0.42, 0.5, 0.28),
   vest: new THREE.BoxGeometry(0.46, 0.4, 0.32),
   limb: new THREE.BoxGeometry(0.12, 0.44, 0.12),
   broom: new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6),
   crate: new THREE.BoxGeometry(0.3, 0.26, 0.24),
-  hat: new THREE.BoxGeometry(0.4, 0.18, 0.4),
+  hat: new THREE.SphereGeometry(0.22, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
 };
 
-const headMat = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.75 });
+const headMat = new THREE.MeshStandardMaterial({ color: 0xe0a878, roughness: 0.75 });
 const limbMat = new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.8 });
 const capMat = new THREE.MeshStandardMaterial({ color: 0x22333b, roughness: 0.8 });
 const propMat = new THREE.MeshStandardMaterial({ color: 0x6b4f3a, roughness: 0.85 });
@@ -96,11 +100,11 @@ export class Staff implements Selectable {
 
     if (role === "FUEL_OPERATOR") {
       const hat = new THREE.Mesh(geo.hat, hatMat);
-      hat.position.y = 1.24;
+      hat.position.y = 1.03;
       this.object.add(hat);
     } else {
       const cap = new THREE.Mesh(geo.cap, capMat);
-      cap.position.y = 1.22;
+      cap.position.y = 1.03;
       this.object.add(cap);
     }
 

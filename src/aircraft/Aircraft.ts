@@ -8,6 +8,7 @@ import {
 } from "../selection/Selectable";
 import { setEmissiveHighlight, disposeHighlight } from "../selection/highlight";
 import { brickMaterial, COLORS } from "../world/materials";
+import { createStudRow } from "../assets/AssetFactory";
 import { CURRENT_LOCALE } from "../i18n/strings";
 
 /** Distance (world units) at which a move target counts as reached. */
@@ -67,7 +68,9 @@ export class Aircraft implements Selectable {
   private readonly tmpDir = new THREE.Vector3();
 
   private readonly engines: THREE.Mesh[] = [];
-  private readonly gear: THREE.Mesh[] = [];
+  /** Each entry is the strut+wheel Group for one leg (spec: visible wheel +
+   * axle), toggled as a unit by tickAnimation's gear-retraction check. */
+  private readonly gear: THREE.Object3D[] = [];
   private beaconMat: THREE.MeshStandardMaterial | null = null;
   private animClock = 0;
   /** Cosmetic nose pitch (V1.9 §6) — smoothed toward a per-state target each
@@ -140,6 +143,25 @@ export class Aircraft implements Selectable {
     windshield.position.set(halfFuselage - 0.35 * s, 0.85 * s, 0);
     group.add(windshield);
 
+    // Livery stripe — a single accent-color band under the window line,
+    // reading as an airline paint scheme without a texture/decal system.
+    const liveryMat = brickMaterial(COLORS.aircraftTail, { roughness: 0.35 });
+    for (const side of [-1, 1]) {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(fuselageLength * 0.7, 0.06 * s, 0.03 * s),
+        liveryMat,
+      );
+      stripe.position.set(-0.02 * s, 0.62 * s, side * fuselageRadius * 0.99);
+      group.add(stripe);
+    }
+
+    // Spine stud line — the toy-brick signature detail, running along the
+    // top of the fuselage (spec: "상단 블록 스터드 라인").
+    const studCount = Math.max(4, Math.round((fuselageLength * 0.7) / (0.4 * s)));
+    const studs = createStudRow(studCount, (fuselageLength * 0.7) / studCount, 0xd7dde2);
+    studs.position.set(-0.05 * s, 0.7 * s + fuselageRadius * 0.92, 0);
+    group.add(studs);
+
     const wingMat = brickMaterial(COLORS.aircraftWing, { roughness: 0.5 });
 
     // Main wing, narrower chord + longer span than the old single slab —
@@ -202,6 +224,7 @@ export class Aircraft implements Selectable {
       spec.engineCount === 1
         ? [0]
         : [-1.4 * s, 1.4 * s];
+    const intakeMat = brickMaterial(0x14171d, { roughness: 0.35, metalness: 0.2 });
     for (const ez of engineZs) {
       const pod = new THREE.Mesh(
         new THREE.CylinderGeometry(0.16 * s, 0.16 * s, 0.7 * s, 10),
@@ -209,7 +232,18 @@ export class Aircraft implements Selectable {
       );
       pod.rotation.z = Math.PI / 2;
       pod.position.set(0.1 * s, 0.35 * s, ez);
+      pod.castShadow = true;
       group.add(pod);
+
+      // Intake ring — a dark rim in front of the fan, so the pod reads as a
+      // jet engine (air intake) rather than a plain cylinder.
+      const intake = new THREE.Mesh(
+        new THREE.RingGeometry(0.1 * s, 0.165 * s, 12),
+        intakeMat,
+      );
+      intake.position.set(0.1 * s + 0.351 * s, 0.35 * s, ez);
+      intake.rotation.y = Math.PI / 2;
+      group.add(intake);
 
       const fan = new THREE.Mesh(new THREE.CircleGeometry(0.15 * s, 8), fanMat);
       fan.position.set(0.1 * s + 0.36 * s, 0.35 * s, ez);
@@ -227,11 +261,27 @@ export class Aircraft implements Selectable {
       [-halfFuselage + 1.1 * s, 0, 0.5 * s],
       [-halfFuselage + 1.1 * s, 0, -0.5 * s],
     ];
+    const wheelMat = brickMaterial(0x1a1a1e, { roughness: 0.8 });
     for (const [gx, , gz] of gearPositions) {
-      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5 * s, 6), gearMat);
-      strut.position.set(gx, 0.25 * s, gz);
-      group.add(strut);
-      this.gear.push(strut);
+      const legGroup = new THREE.Group();
+      legGroup.position.set(gx, 0, gz);
+      group.add(legGroup);
+
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * s, 0.03 * s, 0.5 * s, 6), gearMat);
+      strut.position.y = 0.25 * s;
+      legGroup.add(strut);
+
+      // Wheel + axle at the foot of the strut, so gear reads as a real
+      // undercarriage assembly (spec: "바퀴 휠과 서스펜션 축이 보이는").
+      const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09 * s, 0.09 * s, 0.07 * s, 12),
+        wheelMat,
+      );
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.y = 0.03 * s;
+      legGroup.add(wheel);
+
+      this.gear.push(legGroup);
     }
 
     // Tail beacon — blinks (spec §13). Emissive color set once here, never
