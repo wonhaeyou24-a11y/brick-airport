@@ -508,7 +508,7 @@ export class HUD {
       .map(
         (c, i) =>
           `<div class="activity-card ac-kind-${c.kind.toLowerCase()}" data-index="${i}">` +
-          `<div class="ac-card-image">${escapeHtml(c.icon)}</div>` +
+          `<div class="ac-card-image"><span>${escapeHtml(c.icon)}</span></div>` +
           `<div class="ac-card-body">` +
           `<div class="ac-card-head">` +
           `<span class="ac-card-icon">${escapeHtml(c.icon)}</span>` +

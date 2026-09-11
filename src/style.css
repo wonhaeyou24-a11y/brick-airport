@@ -456,18 +456,49 @@ body {
    artwork, not a copied asset, kept as one shared emoji glyph per kind so
    this stays cheap to render (no per-card canvas work). */
 .ac-card-image {
-  height: 64px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 34px;
+  font-size: 40px;
   flex: none;
+  position: relative;
+  overflow: hidden;
 }
 
-.ac-kind-aircraft .ac-card-image { background: linear-gradient(160deg, #2f6fa8, #143a5c); }
-.ac-kind-passenger .ac-card-image { background: linear-gradient(160deg, #3a7a5e, #163f2c); }
-.ac-kind-vehicle .ac-card-image { background: linear-gradient(160deg, #a87a2f, #5c3f14); }
-.ac-kind-staff .ac-card-image { background: linear-gradient(160deg, #a8562f, #5c2a14); }
+/* Each kind gets a small themed "scene" behind its icon instead of a flat
+   color swatch — sky+clouds for aircraft, a runway-stripe floor for ground
+   vehicles, a spotlight badge for staff, a walkway for passengers. Plain
+   CSS gradients only (no external image, no per-frame cost). */
+.ac-kind-aircraft .ac-card-image {
+  background:
+    radial-gradient(28px 18px at 22% 30%, rgba(255,255,255,0.55), transparent 70%),
+    radial-gradient(34px 20px at 78% 22%, rgba(255,255,255,0.4), transparent 70%),
+    radial-gradient(60px 60px at 88% 10%, rgba(255,230,140,0.55), transparent 70%),
+    linear-gradient(160deg, #4a8fc2, #123153);
+}
+
+.ac-kind-passenger .ac-card-image {
+  background:
+    repeating-linear-gradient(120deg, rgba(255,255,255,0.08) 0 10px, transparent 10px 22px),
+    linear-gradient(160deg, #3f8a68, #123723);
+}
+
+.ac-kind-vehicle .ac-card-image {
+  background:
+    repeating-linear-gradient(-35deg, rgba(20,20,20,0.18) 0 10px, transparent 10px 26px),
+    linear-gradient(160deg, #c99a3f, #5c3f14);
+}
+
+.ac-kind-staff .ac-card-image {
+  background:
+    radial-gradient(46px 46px at 50% 40%, rgba(255,214,140,0.5), transparent 72%),
+    linear-gradient(160deg, #c46a35, #5c2a14);
+}
+
+.ac-card-image span {
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.35));
+}
 
 .ac-card-body {
   padding: 8px 12px 10px;
