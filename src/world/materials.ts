@@ -34,6 +34,8 @@ export const COLORS = {
   terminalRoof: 0xe63946,
   terminalGlass: 0x9ad4e6,
   terminalAccent: 0xffb703,
+  /** Dark accent for doors / roof equipment / signage frames (V1.3-B). */
+  terminalDark: 0x3a4046,
   gate: 0x2a9d8f,
   gateBridge: 0xbfc7cc,
   // Service facilities (V0.7-C) — one bright brick colour each.

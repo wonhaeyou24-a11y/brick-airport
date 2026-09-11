@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Building } from "./Building";
 import { CELL_SIZE } from "../world/Grid";
 import { brickMaterial, COLORS } from "../world/materials";
+import { createSignPost, createStud } from "../assets/AssetFactory";
 
 /**
  * Runway — placeholder box with simple markings.
@@ -46,5 +47,31 @@ export class Runway extends Building {
         group.add(stripe);
       }
     }
+
+    // Edge lines along both long sides (spec §11).
+    const edgeGeo = new THREE.BoxGeometry(length - 1, 0.02, 0.12);
+    for (const side of [-1, 1]) {
+      const edge = new THREE.Mesh(edgeGeo, markingMat);
+      edge.position.set(0, 0.31, side * (width / 2 - 0.2));
+      group.add(edge);
+    }
+
+    // Runway edge lights — small studs along both sides, spaced out so they
+    // read from the iso view without turning into a dense strip.
+    const lightSpacing = 3.2;
+    const lightCount = Math.max(2, Math.floor(length / lightSpacing));
+    for (let i = 0; i < lightCount; i++) {
+      const x = -length / 2 + 1 + i * lightSpacing;
+      for (const side of [-1, 1]) {
+        const light = createStud(0xfff2b2, 0.06);
+        light.position.set(x, 0.33, side * (width / 2 + 0.15));
+        group.add(light);
+      }
+    }
+
+    // Small threshold sign at one end (runway identifier post).
+    const sign = createSignPost(1.2, COLORS.runwayMarking, COLORS.terminalDark);
+    sign.position.set(-length / 2 - 0.4, 0, -width / 2 - 0.3);
+    group.add(sign);
   }
 }
