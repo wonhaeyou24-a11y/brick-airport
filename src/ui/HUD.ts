@@ -63,6 +63,32 @@ export interface GroundOpRow {
   needsStaff?: boolean;
 }
 
+/** One row of the Missions panel (V1.0-E). Only ACTIVE missions are shown. */
+export interface MissionRow {
+  title: string;
+  description: string;
+  /** e.g. "2/3" — progress toward target, already clamped. */
+  progressText: string;
+  /** 0–1, for the progress bar fill. */
+  progressFraction: number;
+  /** e.g. "+$500 · +3 rep". */
+  rewardText: string;
+}
+
+/** One row of the Operational Events panel (V1.0-E). Only ACTIVE events. */
+export interface EventRow {
+  /** Emoji marker for the event type. */
+  icon: string;
+  title: string;
+  description: string;
+  /** e.g. "12/18". */
+  progressText: string;
+  /** 0–1, for the progress bar fill. */
+  progressFraction: number;
+  /** e.g. "0:45 left" — game-seconds remaining, mm:ss. */
+  timeText: string;
+}
+
 /** Live operations metrics shown under the Airport Statistics grid (V0.7 / V0.8). */
 export interface OperationsInfo {
   serviceScore: number;
@@ -109,6 +135,10 @@ export class HUD {
   private readonly flightHistoryListEl: HTMLElement;
   private readonly groundOpsEl: HTMLElement;
   private readonly groundOpsListEl: HTMLElement;
+  private readonly missionsEl: HTMLElement;
+  private readonly missionsListEl: HTMLElement;
+  private readonly eventsEl: HTMLElement;
+  private readonly eventsListEl: HTMLElement;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -145,6 +175,10 @@ export class HUD {
     this.flightHistoryListEl = this.must(".js-flight-history-list");
     this.groundOpsEl = this.must(".js-ground-ops");
     this.groundOpsListEl = this.must(".js-ground-ops-list");
+    this.missionsEl = this.must(".js-missions");
+    this.missionsListEl = this.must(".js-missions-list");
+    this.eventsEl = this.must(".js-events");
+    this.eventsListEl = this.must(".js-events-list");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
@@ -304,11 +338,78 @@ export class HUD {
       .join("");
   }
 
+  /**
+   * Render the Missions panel (V1.0-E) — up to three ACTIVE objectives. A
+   * separate panel in the middle stack; hidden until the first mission is
+   * active. Never a full-screen UI (spec §E.1).
+   */
+  setMissions(rows: MissionRow[]): void {
+    if (rows.length === 0) {
+      this.missionsEl.hidden = true;
+      return;
+    }
+    this.missionsEl.hidden = false;
+    this.missionsListEl.innerHTML = rows
+      .map((r) => {
+        const pct = Math.round(clamp01(r.progressFraction) * 100);
+        return (
+          `<div class="mission-row">` +
+          `<div class="mrow-head">` +
+          `<span class="mrow-title">${escapeHtml(r.title)}</span>` +
+          `<span class="mrow-progress">${escapeHtml(r.progressText)}</span>` +
+          `</div>` +
+          `<div class="mrow-bar"><i style="width:${pct}%"></i></div>` +
+          `<div class="mrow-foot">` +
+          `<span class="mrow-desc">${escapeHtml(r.description)}</span>` +
+          `<span class="mrow-reward">${escapeHtml(r.rewardText)}</span>` +
+          `</div>` +
+          `</div>`
+        );
+      })
+      .join("");
+  }
+
+  /**
+   * Render the Operational Events panel (V1.0-E) — the ACTIVE operating
+   * prompts. A separate panel; hidden when nothing is running. Fire / resolve /
+   * expire are surfaced through showNotice by Game, not here.
+   */
+  setEvents(rows: EventRow[]): void {
+    if (rows.length === 0) {
+      this.eventsEl.hidden = true;
+      return;
+    }
+    this.eventsEl.hidden = false;
+    this.eventsListEl.innerHTML = rows
+      .map((r) => {
+        const pct = Math.round(clamp01(r.progressFraction) * 100);
+        return (
+          `<div class="event-row">` +
+          `<div class="erow-head">` +
+          `<span class="erow-title">${escapeHtml(r.icon)} ${escapeHtml(r.title)}</span>` +
+          `<span class="erow-progress">${escapeHtml(r.progressText)}</span>` +
+          `</div>` +
+          `<div class="mrow-bar"><i style="width:${pct}%"></i></div>` +
+          `<div class="erow-foot">` +
+          `<span class="erow-desc">${escapeHtml(r.description)}</span>` +
+          `<span class="erow-time">${escapeHtml(r.timeText)}</span>` +
+          `</div>` +
+          `</div>`
+        );
+      })
+      .join("");
+  }
+
   private must(selector: string): HTMLElement {
     const el = this.root.querySelector<HTMLElement>(selector);
     if (!el) throw new Error(`HUD: missing element "${selector}"`);
     return el;
   }
+}
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
 function escapeHtml(text: string): string {
@@ -340,6 +441,14 @@ const TEMPLATE = /* html */ `
   </div>
 
   <div class="hud-mid">
+    <div class="hud-panel mission-panel js-missions" hidden>
+      <div class="stat-panel-title">Missions</div>
+      <div class="mission-list js-missions-list"></div>
+    </div>
+    <div class="hud-panel event-panel js-events" hidden>
+      <div class="stat-panel-title">Operational Event</div>
+      <div class="event-list js-events-list"></div>
+    </div>
     <div class="hud-panel flight-history js-flight-history" hidden>
       <div class="stat-panel-title">Recent Flights</div>
       <div class="flight-history-list js-flight-history-list"></div>

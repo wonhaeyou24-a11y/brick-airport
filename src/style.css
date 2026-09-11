@@ -160,6 +160,13 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--hud-gap);
+  /* The middle stack (missions, events, recent flights, ground ops) must never
+     push the bottom HUD off-screen — cap it and let it scroll internally. */
+  min-height: 0;
+  max-height: calc(100vh - 340px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  pointer-events: auto;
 }
 
 .hud-bottom {
@@ -269,6 +276,92 @@ body {
 
 .gop-row .gop-needsstaff {
   color: var(--brick-red);
+}
+
+/* ------------------------------------------------ missions & events --- */
+
+.mission-panel,
+.event-panel {
+  max-width: 340px;
+  font-size: 12px;
+}
+
+.mission-list,
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mission-row,
+.event-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mrow-head,
+.mrow-foot,
+.erow-head,
+.erow-foot {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  white-space: nowrap;
+}
+
+.mrow-title,
+.erow-title {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mrow-progress,
+.erow-progress {
+  font-weight: 800;
+  color: var(--brick-blue);
+}
+
+.mrow-desc,
+.erow-desc {
+  flex: 1;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.mrow-reward {
+  color: var(--brick-green);
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.erow-time {
+  color: var(--brick-yellow);
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.mrow-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(34, 51, 59, 0.18);
+  overflow: hidden;
+}
+
+.mrow-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brick-green);
+  transition: width 0.3s ease;
+}
+
+.event-row .mrow-bar i {
+  background: var(--brick-yellow);
 }
 
 .hud-context {
@@ -592,6 +685,41 @@ body {
 
   /* Cap the feed on the small screen (§46). */
   .ground-ops-list .gop-row:nth-child(n + 4) {
+    display: none;
+  }
+
+  /* Missions / events: compact on the narrow screen (spec §E.5). */
+  .mission-panel,
+  .event-panel {
+    max-width: 60vw;
+  }
+
+  .mission-list,
+  .event-list {
+    gap: 6px;
+  }
+
+  .mrow-head,
+  .erow-head {
+    white-space: normal;
+  }
+
+  /* Compact rows: drop the prose, keep title · progress · reward/time
+     (spec §E.5 — "MISSION / Flights 2/3 / +$500"). */
+  .mrow-desc,
+  .erow-desc {
+    display: none;
+  }
+
+  .mrow-foot,
+  .erow-foot {
+    font-size: 10px;
+    white-space: normal;
+    justify-content: flex-end;
+  }
+
+  /* Two active missions is plenty of vertical budget on mobile. */
+  .mission-list .mission-row:nth-child(n + 3) {
     display: none;
   }
 

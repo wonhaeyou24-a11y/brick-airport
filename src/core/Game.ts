@@ -10,6 +10,7 @@ import type {
   BuildingType,
   FlightData,
   FlightState,
+  OperationalEventType,
 } from "./GameState";
 import { GameLoop } from "./GameLoop";
 import { GateStatusSync } from "./GateStatusSync";
@@ -115,6 +116,10 @@ export class Game {
   private shownOperationsSig = "";
   /** Signature of the Ground Operations panel (V0.8-E). */
   private shownGroundOpsSig = "";
+  /** Signature of the Missions panel (V1.0-E). */
+  private shownMissionsSig = "";
+  /** Signature of the Operational Events panel (V1.0-E). */
+  private shownEventsSig = "";
 
   constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
     this.canvas = canvas;
@@ -838,7 +843,68 @@ export class Game {
     this.refreshOperations();
     this.refreshFlightHistory();
     this.refreshGroundOps();
+    this.refreshMissions();
+    this.refreshEvents();
     this.refreshBuildMenu();
+  }
+
+  /**
+   * Missions panel (V1.0-E) — the ACTIVE objectives (max 3). DOM only touched
+   * when a title / progress / reward changes. A separate mid-stack panel; it
+   * never replaces the Statistics panel (spec §E.1).
+   */
+  private refreshMissions(): void {
+    const active = this.state.data.missions
+      .filter((m) => m.state === "ACTIVE")
+      .slice(0, 3);
+    const sig = active
+      .map((m) => `${m.id}:${m.progress}/${m.target}`)
+      .join(",");
+    if (sig === this.shownMissionsSig) return;
+    this.shownMissionsSig = sig;
+    this.hud.setMissions(
+      active.map((m) => ({
+        title: m.title,
+        description: m.description,
+        progressText: `${formatCount(m.progress)}/${formatCount(m.target)}`,
+        progressFraction: m.target > 0 ? m.progress / m.target : 0,
+        rewardText: `+$${m.rewardMoney.toLocaleString("en-US")} · +${m.rewardReputation} rep`,
+      })),
+    );
+  }
+
+  /**
+   * Operational Events panel (V1.0-E) — the ACTIVE operating prompts. DOM only
+   * touched when progress / remaining time changes (time bucketed to whole
+   * seconds so it isn't rewritten every frame).
+   */
+  private refreshEvents(): void {
+    const active = this.state.data.operationalEvents.filter(
+      (e) => e.state === "ACTIVE",
+    );
+    const sig = active
+      .map((e) => {
+        const left = Math.max(0, Math.ceil(e.duration - e.elapsed));
+        return `${e.id}:${e.progress}/${e.target}:${left}`;
+      })
+      .join(",");
+    if (sig === this.shownEventsSig) return;
+    this.shownEventsSig = sig;
+    this.hud.setEvents(
+      active.map((e) => {
+        const left = Math.max(0, Math.ceil(e.duration - e.elapsed));
+        const mm = Math.floor(left / 60);
+        const ss = String(left % 60).padStart(2, "0");
+        return {
+          icon: OPERATIONAL_EVENT_ICON[e.type],
+          title: e.title,
+          description: e.description,
+          progressText: `${formatCount(e.progress)}/${formatCount(e.target)}`,
+          progressFraction: e.target > 0 ? e.progress / e.target : 0,
+          timeText: `${mm}:${ss} left`,
+        };
+      }),
+    );
   }
 
   /**
@@ -1057,6 +1123,19 @@ function flightProgressLine(state: FlightState): string {
 }
 
 /** "BOARDING_SERVICE" -> "Boarding Service" */
+/** Whole-number display for a mission / event counter ("14,000", "3"). */
+function formatCount(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+const OPERATIONAL_EVENT_ICON: Record<OperationalEventType, string> = {
+  PASSENGER_SURGE: "👥",
+  FLIGHT_DEMAND: "✈",
+  GROUND_DELAY: "🧰",
+  MAINTENANCE_REQUEST: "🔧",
+  STAFF_SHORTAGE: "🧑‍✈️",
+};
+
 function opLabel(type: string): string {
   return type
     .toLowerCase()
