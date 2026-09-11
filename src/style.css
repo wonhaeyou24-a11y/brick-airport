@@ -270,52 +270,76 @@ body {
 
 /* -------------------------------------------------- left navigation --- */
 
+/* V2.0 visual reconstruction — a single continuous glass panel (not N
+   separate boxes with gaps) with icon-badge rows and thin dividers, matching
+   the uploaded reference's nav card exactly. */
 .navrail {
   position: absolute;
   top: 78px;
   left: var(--hud-gap);
   bottom: var(--hud-gap);
-  width: 92px;
+  width: 168px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
   overflow-y: auto;
+  overflow-x: hidden;
   pointer-events: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 6px;
 }
 
 .nav-item {
   pointer-events: auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 4px;
-  background: var(--panel-bg);
+  gap: 10px;
+  padding: 10px 8px;
+  background: none;
   color: var(--panel-text);
-  border: 2px solid var(--panel-border);
-  border-radius: 12px;
-  box-shadow: var(--panel-shadow);
+  border: none;
+  border-bottom: 1px solid var(--navy-line);
+  border-radius: 10px;
   font-family: var(--font);
   cursor: pointer;
   flex: none;
+  text-align: left;
+}
+
+.nav-item:last-child {
+  border-bottom: none;
 }
 
 .nav-item .nav-icon {
-  font-size: 18px;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-item .nav-label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .nav-item.is-active {
   background: var(--navy-700);
-  border-color: var(--accent-yellow);
 }
 
-.nav-item.is-active .nav-label,
 .nav-item.is-active .nav-icon {
+  background: var(--accent-yellow);
+  color: var(--navy-900);
+}
+
+.nav-item.is-active .nav-label {
   color: var(--accent-yellow);
 }
 
@@ -324,7 +348,7 @@ body {
 .drawer {
   position: absolute;
   top: 78px;
-  left: calc(92px + var(--hud-gap) * 2);
+  left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
   max-height: calc(100% - 78px - 190px);
   display: flex;
@@ -409,22 +433,47 @@ body {
 
 .activity-card {
   pointer-events: auto;
-  flex: 1 1 200px;
-  min-width: 180px;
-  max-width: 260px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 270px;
   background: var(--panel-bg);
-  border: 2px solid var(--panel-border);
+  border: 1.5px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
-  padding: 10px 14px;
+  padding: 0;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  overflow: hidden;
 }
 
 .activity-card:hover {
   border-color: var(--accent-cyan);
+}
+
+/* Image/illustration header — the reference's photo thumbnail area. A flat
+   vector-style scene (gradient + a large icon), not a photo — original
+   artwork, not a copied asset, kept as one shared emoji glyph per kind so
+   this stays cheap to render (no per-card canvas work). */
+.ac-card-image {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  flex: none;
+}
+
+.ac-kind-aircraft .ac-card-image { background: linear-gradient(160deg, #2f6fa8, #143a5c); }
+.ac-kind-passenger .ac-card-image { background: linear-gradient(160deg, #3a7a5e, #163f2c); }
+.ac-kind-vehicle .ac-card-image { background: linear-gradient(160deg, #a87a2f, #5c3f14); }
+.ac-kind-staff .ac-card-image { background: linear-gradient(160deg, #a8562f, #5c2a14); }
+
+.ac-card-body {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .ac-card-head {
@@ -434,7 +483,7 @@ body {
 }
 
 .ac-card-icon {
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .ac-card-title {
@@ -456,6 +505,26 @@ body {
 .ac-card-line {
   font-size: 11px;
   opacity: 0.65;
+}
+
+.ac-card-footer {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--navy-line);
+  display: flex;
+}
+
+.ac-card-select {
+  pointer-events: none; /* whole card is already the click target */
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  background: rgba(79, 195, 247, 0.12);
+  border: 1px solid rgba(79, 195, 247, 0.35);
+  border-radius: 999px;
+  padding: 5px 0;
 }
 
 /* --------------------------------------------------- zoom / utility --- */
@@ -524,7 +593,7 @@ body {
 
 .info-slot {
   position: absolute;
-  left: calc(92px + var(--hud-gap) * 2);
+  left: calc(168px + var(--hud-gap) * 2);
   right: 140px;
   bottom: 160px;
   pointer-events: none;
@@ -984,7 +1053,7 @@ body {
 .build-menu {
   position: absolute;
   top: 78px;
-  left: calc(92px + var(--hud-gap) * 2);
+  left: calc(168px + var(--hud-gap) * 2);
   width: 320px;
   max-height: calc(100% - 78px - 190px);
   display: flex;
@@ -1149,14 +1218,16 @@ body {
   .navrail {
     top: 64px;
     width: 56px;
+    padding: 4px;
   }
 
   .nav-item {
     padding: 8px 2px;
+    justify-content: center;
   }
 
   .nav-item .nav-label {
-    font-size: 8px;
+    display: none; /* icon-only on mobile — matches the compact drawer/info-slot width */
   }
 
   .drawer {

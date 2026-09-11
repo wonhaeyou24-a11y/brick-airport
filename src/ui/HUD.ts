@@ -508,12 +508,16 @@ export class HUD {
       .map(
         (c, i) =>
           `<div class="activity-card ac-kind-${c.kind.toLowerCase()}" data-index="${i}">` +
+          `<div class="ac-card-image">${escapeHtml(c.icon)}</div>` +
+          `<div class="ac-card-body">` +
           `<div class="ac-card-head">` +
           `<span class="ac-card-icon">${escapeHtml(c.icon)}</span>` +
           `<span class="ac-card-title">${escapeHtml(c.title)}</span>` +
           `</div>` +
           `<div class="ac-card-subtitle">${escapeHtml(c.subtitle)}</div>` +
           c.lines.map((l) => `<div class="ac-card-line">${escapeHtml(l)}</div>`).join("") +
+          `<div class="ac-card-footer"><span class="ac-card-select">🖐 선택</span></div>` +
+          `</div>` +
           `</div>`,
       )
       .join("");
