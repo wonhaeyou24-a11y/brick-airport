@@ -37,7 +37,12 @@ import {
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
 import { computeAirportLevel } from "../progression/AirportProgression";
-import { checkExpansion, expansionBounds, expansionTier } from "../progression/Expansion";
+import {
+  MAX_EXPANSION_LEVEL,
+  checkExpansion,
+  expansionBounds,
+  expansionTier,
+} from "../progression/Expansion";
 import { OperationsManager } from "../operations/OperationsManager";
 import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { MissionManager } from "../missions/MissionManager";
@@ -146,6 +151,8 @@ export class Game {
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
   private shownEventsSig = "";
+  /** Signature of the BuildMenu's expansion card (V1.2-E). */
+  private shownExpansionSig = "";
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -268,6 +275,8 @@ export class Game {
       onReset: () => this.cameraController.reset(),
       onToggleGrid: () =>
         this.world.setGridVisible(!this.world.isGridVisible()),
+      onSave: () => this.save(),
+      onLoad: () => this.requestLoad(),
     });
     this.refreshHudStats();
     this.refreshStatistics();
@@ -281,9 +290,11 @@ export class Game {
       {
         onSelectType: (type) => this.onBuildTypeSelected(type),
         onCancel: () => this.buildController.cancel(),
+        onExpand: () => this.expandAirport(),
       },
     );
     this.refreshBuildMenu();
+    this.refreshExpansionCard();
     this.refreshOperations();
 
     this.loop = new GameLoop(
@@ -327,6 +338,7 @@ export class Game {
     const result = this.saveManager.save(this.state.data);
     this.saveInProgress = false;
     this.saveStatus = result.ok ? "SAVED" : "ERROR";
+    this.hud.setSaveStatus(this.saveStatus);
     this.secondsSinceSave = 0;
     if (!result.ok) this.hud.showNotice("Save failed — previous save kept.");
     return result.ok;
@@ -1040,6 +1052,7 @@ export class Game {
     this.refreshMissions();
     this.refreshEvents();
     this.refreshBuildMenu();
+    this.refreshExpansionCard();
   }
 
   /**
@@ -1148,6 +1161,30 @@ export class Game {
       onTimeRate,
       reputation,
       groundEfficiency,
+    });
+  }
+
+  /**
+   * BuildMenu's expansion card (V1.2-E) — reuses the same panel, no new large
+   * UI (spec §E.5). DOM only touched when level / money-affordability changes.
+   */
+  private refreshExpansionCard(): void {
+    const level = this.state.airport.expansionLevel ?? 0;
+    const money = this.state.airport.money;
+    const airportLevel = this.state.airport.level;
+    const next = level + 1;
+    const available = next <= MAX_EXPANSION_LEVEL;
+    const tier = available ? expansionTier(next) : null;
+    const locked = !!tier && airportLevel < tier.requiredLevel;
+    const sig = `${available}|${level}|${locked}|${money >= (tier?.cost ?? 0)}`;
+    if (sig === this.shownExpansionSig) return;
+    this.shownExpansionSig = sig;
+    this.buildMenu.setExpansion({
+      available,
+      worldSize: tier?.worldSize ?? 0,
+      cost: tier?.cost ?? 0,
+      requiredLevel: tier?.requiredLevel ?? 0,
+      locked,
     });
   }
 

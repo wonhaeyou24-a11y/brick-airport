@@ -14,6 +14,18 @@ import type { BuildModeState } from "../construction/BuildController";
 export interface BuildMenuCallbacks {
   onSelectType(type: BuildingType): void;
   onCancel(): void;
+  /** V1.2-E. */
+  onExpand(): void;
+}
+
+/** V1.2-E — the airport-expansion card shown under the building list. */
+export interface ExpansionInfo {
+  /** False once the airport is at its max tier — the card just says so. */
+  available: boolean;
+  worldSize: number;
+  cost: number;
+  requiredLevel: number;
+  locked: boolean;
 }
 
 /** Per-type availability, pushed from Game when money / level changes. */
@@ -37,6 +49,9 @@ export class BuildMenu {
   private readonly cancelBtn: HTMLButtonElement;
   private readonly typeButtons = new Map<BuildingType, HTMLButtonElement>();
   private readonly costEls = new Map<BuildingType, HTMLElement>();
+  private readonly expansionCard: HTMLElement;
+  private readonly expansionBody: HTMLElement;
+  private readonly expandBtn: HTMLButtonElement;
   private open = false;
 
   constructor(
@@ -60,10 +75,30 @@ export class BuildMenu {
       btn.addEventListener("click", () => callbacks.onSelectType(type));
     }
 
+    this.expansionCard = this.must(".js-expansion");
+    this.expansionBody = this.must(".js-expansion-body");
+    this.expandBtn = this.must(".js-expand-btn");
+    this.expandBtn.addEventListener("click", () => callbacks.onExpand());
+
     this.toggle.addEventListener("click", () => this.setOpen(!this.open));
     this.cancelBtn.addEventListener("click", () => callbacks.onCancel());
 
     this.setOpen(false);
+  }
+
+  /** Update the airport-expansion card (spec §E.5/§E.6). */
+  setExpansion(info: ExpansionInfo): void {
+    if (!info.available) {
+      this.expansionCard.hidden = true;
+      return;
+    }
+    this.expansionCard.hidden = false;
+    this.expandBtn.hidden = info.locked;
+    this.expansionBody.innerHTML = info.locked
+      ? `<span class="exp-locked">LOCKED</span>` +
+        `<span class="exp-line">Required Airport Level ${info.requiredLevel}</span>`
+      : `<span class="exp-line">${info.worldSize}&times;${info.worldSize}</span>` +
+        `<span class="exp-line">Cost $${info.cost.toLocaleString("en-US")}</span>`;
   }
 
   /** Reflect BuildController state: highlight active type, show Cancel. */
@@ -119,6 +154,11 @@ function template(types: readonly BuildMenuType[]): string {
   <button class="brick-btn build-toggle js-build-toggle" title="Build">BUILD</button>
   <div class="build-list js-build-list" hidden>
     ${buttons}
+    <div class="expansion-card js-expansion" hidden>
+      <div class="stat-panel-title">Airport Expansion</div>
+      <div class="expansion-body js-expansion-body"></div>
+      <button class="brick-btn expand-btn js-expand-btn">EXPAND</button>
+    </div>
     <button class="brick-btn build-cancel js-build-cancel" hidden>Cancel</button>
   </div>
 `;

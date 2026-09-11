@@ -96,6 +96,19 @@ body {
   opacity: 0.7;
 }
 
+.save-status {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--brick-green);
+}
+
+.save-status.save-error {
+  color: var(--brick-red);
+}
+
 .hud-stats {
   display: flex;
   flex-wrap: wrap;
@@ -561,6 +574,48 @@ body {
   color: #fff;
   font-size: 14px;
   min-width: 120px;
+}
+
+/* ------------------------------------------------------- airport expansion --- */
+
+.expansion-card {
+  pointer-events: auto;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  border: 3px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 8px 12px;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.expansion-body {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 1px;
+}
+
+.exp-locked {
+  font-weight: 800;
+  color: var(--brick-red);
+}
+
+.exp-line {
+  opacity: 0.8;
+}
+
+.expand-btn {
+  background: var(--brick-green);
+  color: #fff;
+  font-size: 13px;
+  min-height: 36px;
+  margin-top: 2px;
 }
 
 /* --------------------------------------------------------- responsive --- */

@@ -104,6 +104,9 @@ export interface HudCallbacks {
   onZoomOut(): void;
   onReset(): void;
   onToggleGrid(): void;
+  /** V1.2-E. */
+  onSave(): void;
+  onLoad(): void;
 }
 
 export class HUD {
@@ -139,6 +142,7 @@ export class HUD {
   private readonly missionsListEl: HTMLElement;
   private readonly eventsEl: HTMLElement;
   private readonly eventsListEl: HTMLElement;
+  private readonly saveStatusEl: HTMLElement;
 
   private revenueTimer = 0;
   private noticeTimer = 0;
@@ -179,11 +183,22 @@ export class HUD {
     this.missionsListEl = this.must(".js-missions-list");
     this.eventsEl = this.must(".js-events");
     this.eventsListEl = this.must(".js-events-list");
+    this.saveStatusEl = this.must(".js-save-status");
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
     this.must(".js-zoom-out").addEventListener("click", callbacks.onZoomOut);
     this.must(".js-reset").addEventListener("click", callbacks.onReset);
     this.must(".js-grid").addEventListener("click", callbacks.onToggleGrid);
+    this.must(".js-save").addEventListener("click", callbacks.onSave);
+    this.must(".js-load").addEventListener("click", callbacks.onLoad);
+  }
+
+  /** Save-status badge next to the airport title (spec §E.1). */
+  setSaveStatus(status: "IDLE" | "SAVED" | "ERROR"): void {
+    this.saveStatusEl.hidden = status === "IDLE";
+    this.saveStatusEl.textContent =
+      status === "SAVED" ? "● SAVED" : status === "ERROR" ? "● SAVE ERROR" : "";
+    this.saveStatusEl.classList.toggle("save-error", status === "ERROR");
   }
 
   setStats(stats: HudStats): void {
@@ -425,6 +440,7 @@ const TEMPLATE = /* html */ `
     <div class="hud-panel hud-title">
       Brick Airport
       <small class="js-airport-name">My Airport</small>
+      <b class="save-status js-save-status" hidden></b>
     </div>
     <div class="hud-panel hud-stats">
       <div class="hud-stat"><span>Level</span><b class="js-level">1</b></div>
@@ -485,6 +501,8 @@ const TEMPLATE = /* html */ `
       </div>
     </div>
     <div class="hud-controls">
+      <button class="brick-btn btn-reset js-save" title="Save">SAVE</button>
+      <button class="brick-btn btn-reset js-load" title="Load">LOAD</button>
       <button class="brick-btn btn-reset js-grid" title="Toggle grid">GRID</button>
       <button class="brick-btn btn-reset js-reset" title="Reset view">RESET</button>
       <button class="brick-btn js-zoom-out" title="Zoom out">&minus;</button>
