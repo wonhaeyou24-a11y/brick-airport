@@ -85,6 +85,19 @@ import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
  * of truth, and all state / world mutation for a placed building funnels
  * through commitBuilding().
  */
+/**
+ * A cheap, one-time heuristic for "small screen or touch-primary device"
+ * (spec §22/§26) — never used for gameplay, only for shadow/pixel-ratio
+ * quality. Narrow viewport OR a coarse (touch) primary pointer.
+ */
+function isLowPowerDevice(): boolean {
+  const narrow = window.innerWidth <= 480;
+  const coarsePointer =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  return narrow || coarsePointer;
+}
+
 /** Periodic autosave interval, in accumulated game-seconds (spec §C.1). */
 const AUTOSAVE_INTERVAL = 60;
 /**
@@ -99,6 +112,8 @@ export class Game {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
+  /** Decided once at startup from viewport/pointer heuristics (V1.3-E). */
+  private readonly lowPowerDevice: boolean;
 
   private readonly state: GameState;
   private readonly cameraController: CameraController;
@@ -164,11 +179,20 @@ export class Game {
 
     const { clientWidth: w, clientHeight: h } = canvas.parentElement ?? canvas;
 
+    // Mobile-aware shadow quality (spec §22/§26): same gameplay everywhere,
+    // just a cheaper shadow map + lower pixel ratio on small/touch devices so
+    // 375x812 doesn't pay desktop shadow cost. Decided once at startup.
+    this.lowPowerDevice = isLowPowerDevice();
+
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio, this.lowPowerDevice ? 1.5 : 2),
+    );
     this.renderer.setSize(w, h, false);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.lowPowerDevice
+      ? THREE.PCFShadowMap
+      : THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8ecae6);
@@ -534,11 +558,13 @@ export class Game {
 
     const sun = new THREE.DirectionalLight(0xfff2d8, 1.6);
     sun.position.set(28, 40, 18);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.castShadow = !this.lowPowerDevice; // spec §22/§26 — shadows off on small/touch devices
+    const mapSize = this.lowPowerDevice ? 512 : 1024;
+    sun.shadow.mapSize.set(mapSize, mapSize);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 140;
-    const s = 45;
+    // Covers the fully-expanded 80x80 airport (V1.2-D) with a small margin.
+    const s = 42;
     sun.shadow.camera.left = -s;
     sun.shadow.camera.right = s;
     sun.shadow.camera.top = s;
