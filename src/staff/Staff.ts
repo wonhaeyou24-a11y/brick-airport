@@ -50,6 +50,10 @@ const vestMats: Record<StaffRole, THREE.MeshStandardMaterial> = {
 };
 const shirtMat = new THREE.MeshStandardMaterial({ color: 0xdfe4ea, roughness: 0.8 });
 
+/** Radians the legs swing to either side while walking (matches Passenger). */
+const WALK_SWING = 0.4;
+const WALK_RATE = 4;
+
 export class Staff implements Selectable {
   readonly id: string;
   readonly selectionKind: SelectionKind = "GROUND_STAFF";
@@ -57,6 +61,10 @@ export class Staff implements Selectable {
   readonly data: StaffData;
 
   private readonly tmpDir = new THREE.Vector3();
+  private legL: THREE.Mesh | null = null;
+  private legR: THREE.Mesh | null = null;
+  private walkClock = 0;
+  private walking = false;
 
   constructor(data: StaffData) {
     this.data = data;
@@ -103,6 +111,8 @@ export class Staff implements Selectable {
       const leg = new THREE.Mesh(geo.limb, limbMat);
       leg.position.set(sx * 0.12, 0.22, 0);
       this.object.add(leg);
+      if (sx < 0) this.legL = leg;
+      else this.legR = leg;
     }
 
     if (role === "CLEANING_AGENT") {
@@ -123,11 +133,27 @@ export class Staff implements Selectable {
     this.object.position.set(p.x, p.y, p.z);
 
     const t = this.data.targetPosition;
+    this.walking = !!t;
     if (t) {
       this.tmpDir.set(t.x - p.x, 0, t.z - p.z);
       if (this.tmpDir.lengthSq() > 1e-4) {
         this.object.rotation.y = Math.atan2(this.tmpDir.x, this.tmpDir.z);
       }
+    }
+  }
+
+  /** Simple walking leg-swing (spec §15/§23) — cosmetic only, never touches `data`. */
+  tickAnimation(deltaTime: number): void {
+    if (!this.legL || !this.legR) return;
+    if (this.walking) {
+      this.walkClock += deltaTime;
+      const swing = Math.sin(this.walkClock * WALK_RATE * Math.PI * 2) * WALK_SWING;
+      this.legL.rotation.x = swing;
+      this.legR.rotation.x = -swing;
+    } else if (this.legL.rotation.x !== 0 || this.legR.rotation.x !== 0) {
+      this.walkClock = 0;
+      this.legL.rotation.x = 0;
+      this.legR.rotation.x = 0;
     }
   }
 

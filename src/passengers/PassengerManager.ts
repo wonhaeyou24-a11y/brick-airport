@@ -72,7 +72,7 @@ export class PassengerManager {
     this.captureSatisfaction();
     this.cullArrived();
     this.reconcileEntities();
-    this.syncTransforms();
+    this.syncTransforms(deltaTime);
   }
 
   dispose(): void {
@@ -239,9 +239,10 @@ export class PassengerManager {
     }
   }
 
-  private syncTransforms(): void {
+  private syncTransforms(deltaTime: number): void {
     for (const passenger of this.passengers.values()) {
       passenger.syncFromData();
+      passenger.tickAnimation(deltaTime);
     }
   }
 

@@ -65,7 +65,10 @@ export class StaffManager {
         this.paths.delete(id);
       }
     }
-    for (const staff of this.staff.values()) staff.syncFromData();
+    for (const staff of this.staff.values()) {
+      staff.syncFromData();
+      staff.tickAnimation(deltaTime);
+    }
   }
 
   /**
