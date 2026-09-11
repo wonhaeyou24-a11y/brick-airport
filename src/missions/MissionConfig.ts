@@ -1,4 +1,5 @@
 import type { MissionType } from "../core/GameState";
+import { CURRENT_LOCALE, type Locale } from "../i18n/strings";
 
 /**
  * MissionConfig — the fixed mission pool (spec §B.1). Pure data, no Three.js.
@@ -43,7 +44,31 @@ export const MISSION_POOL: readonly MissionTemplate[] = [
 export const MAX_ACTIVE_MISSIONS = 3;
 
 /** Player-facing objective text for a mission type + target. */
-export function missionDescription(type: MissionType, target: number): string {
+export function missionDescription(
+  type: MissionType,
+  target: number,
+  locale: Locale = CURRENT_LOCALE,
+): string {
+  if (locale === "ko") {
+    switch (type) {
+      case "FLIGHT_TARGET":
+        return `항공편 ${target}회 운항`;
+      case "PASSENGER_TARGET":
+        return `승객 ${target}명 처리`;
+      case "REVENUE_TARGET":
+        return `항공권 수익 ${target.toLocaleString("ko-KR")}원 달성`;
+      case "BUILD_TARGET":
+        return `건물 ${target}개 보유`;
+      case "OPERATION_TARGET":
+        return `지상조업 ${target}건 완료`;
+      case "STAFF_TARGET":
+        return `직원 ${target}명 고용`;
+      case "FACILITY_TARGET":
+        return `서비스 시설 ${target}개 건설`;
+      case "SATISFACTION_TARGET":
+        return `평균 승객 만족도 ${target} 달성`;
+    }
+  }
   switch (type) {
     case "FLIGHT_TARGET":
       return `Complete ${target} flights`;

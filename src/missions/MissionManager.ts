@@ -1,6 +1,6 @@
 import type { GameState, MissionData, MissionType } from "../core/GameState";
 import { isServiceFacility } from "../core/GameState";
-import { formatMoney } from "../i18n/strings";
+import { formatMoney, missionTitle } from "../i18n/strings";
 import {
   MAX_ACTIVE_MISSIONS,
   MISSION_POOL,
@@ -69,7 +69,7 @@ export class MissionManager {
       const mission: MissionData = {
         id: this.state.nextMissionId(),
         type: tpl.type,
-        title: tpl.title,
+        title: missionTitle(tpl.title),
         description: missionDescription(tpl.type, tpl.target),
         state: "AVAILABLE",
         target: tpl.target,

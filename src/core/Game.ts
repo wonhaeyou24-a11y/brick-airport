@@ -66,7 +66,7 @@ import {
   staffRoleLabel,
 } from "../staff/StaffConfig";
 import { jitterFromId, experienceLabelKo } from "../operations/AirportOperations";
-import { CURRENT_LOCALE, formatMoney, stateLabel, t } from "../i18n/strings";
+import { CURRENT_LOCALE, cityLabel, formatMoney, stateLabel, t } from "../i18n/strings";
 import { getFacilityEffect } from "../buildings/FacilityConfig";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
@@ -1365,8 +1365,8 @@ function routeTypeLabel(routeType: "DEPARTURE" | "ARRIVAL"): string {
 
 function flightRoute(flight: FlightData): string {
   return flight.routeType === "ARRIVAL"
-    ? `${flight.destination} → ${flight.origin}`
-    : `${flight.origin} → ${flight.destination}`;
+    ? `${cityLabel(flight.destination)} → ${cityLabel(flight.origin)}`
+    : `${cityLabel(flight.origin)} → ${cityLabel(flight.destination)}`;
 }
 
 /** The departure progress steps, in order (spec V0.6-D). */

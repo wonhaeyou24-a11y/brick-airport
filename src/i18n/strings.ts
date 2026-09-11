@@ -161,3 +161,96 @@ export function stateLabel(value: string, locale: Locale = CURRENT_LOCALE): stri
   if (locale !== "ko") return value;
   return ENUM_KO[value] ?? value;
 }
+
+/**
+ * Route city display names (V1.5 spec §31) — internal FlightData.origin /
+ * .destination stay "SEOUL" / "TOKYO" / ... exactly as today; this is a
+ * display-only label, never written back into GameState.
+ */
+const CITY_KO: Record<string, string> = {
+  SEOUL: "서울",
+  TOKYO: "도쿄",
+  BUSAN: "부산",
+  BANGKOK: "방콕",
+  PARIS: "파리",
+};
+
+export function cityLabel(id: string, locale: Locale = CURRENT_LOCALE): string {
+  if (locale !== "ko") return id;
+  return CITY_KO[id] ?? id;
+}
+
+/**
+ * Mission pool titles (V1.5 §9/§30) — keyed by the English title already
+ * stored as MissionTemplate.title (MissionConfig.ts), so the pool itself
+ * never duplicates its own key. MissionManager resolves this once, at
+ * mission-creation time, into the MissionData it stores — no new field.
+ */
+const MISSION_TITLE_KO: Record<string, string> = {
+  "First Flights": "첫 항공편",
+  "Passengers Served": "승객 처리",
+  "Grow the Airport": "공항 확장",
+  "Ground Crew at Work": "지상조업 가동",
+  "Turn a Profit": "흑자 전환",
+  "Build the Team": "팀 구성",
+  "Busy Skies": "바쁜 하늘",
+  "Full Terminals": "만원 터미널",
+  "Steady Income": "안정적 수입",
+  "Turnaround Machine": "턴어라운드 달인",
+  "Fully Staffed": "정원 충원",
+  "Terminal Expansion": "터미널 확장",
+  "Regional Hub": "지역 허브",
+  "Passenger Milestone": "승객 이정표",
+  "Airport Fortune": "공항의 부",
+  "Passenger Amenities": "승객 편의시설",
+  "Happy Travelers": "행복한 여행객",
+  "Airport Services": "공항 서비스",
+  "Five-Star Airport": "5성급 공항",
+};
+
+export function missionTitle(enTitle: string, locale: Locale = CURRENT_LOCALE): string {
+  if (locale !== "ko") return enTitle;
+  return MISSION_TITLE_KO[enTitle] ?? enTitle;
+}
+
+/**
+ * Operational-event flavour text (V1.5 §9/§30), keyed by the event type enum
+ * — OperationalEventManager resolves this once at event-creation time into
+ * the OperationalEventData it stores, same pattern as missionTitle above.
+ */
+const EVENT_TEXT_KO: Record<string, { title: string; description: string }> = {
+  PASSENGER_SURGE: {
+    title: "승객 급증",
+    description: "공항에 여행객이 몰리고 있습니다 — 계속 이동시키세요.",
+  },
+  FLIGHT_DEMAND: {
+    title: "항공편 수요 증가",
+    description: "항공사들이 더 많은 슬롯을 원합니다 — 항공편을 몇 편 더 처리하세요.",
+  },
+  GROUND_DELAY: {
+    title: "지상조업 지연",
+    description: "턴어라운드 작업이 밀리고 있습니다 — 지상 작업을 처리하세요.",
+  },
+  MAINTENANCE_REQUEST: {
+    title: "정비 요청",
+    description: "다음 턴어라운드 때 게이트 점검이 필요합니다.",
+  },
+  STAFF_SHORTAGE: {
+    title: "직원 부족",
+    description: "인력이 부족합니다 — 직원을 추가로 채용하세요.",
+  },
+};
+
+export function eventTitle(type: string, enTitle: string, locale: Locale = CURRENT_LOCALE): string {
+  if (locale !== "ko") return enTitle;
+  return EVENT_TEXT_KO[type]?.title ?? enTitle;
+}
+
+export function eventDescription(
+  type: string,
+  enDescription: string,
+  locale: Locale = CURRENT_LOCALE,
+): string {
+  if (locale !== "ko") return enDescription;
+  return EVENT_TEXT_KO[type]?.description ?? enDescription;
+}

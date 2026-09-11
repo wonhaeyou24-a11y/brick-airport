@@ -3,7 +3,7 @@ import type {
   OperationalEventData,
   OperationalEventType,
 } from "../core/GameState";
-import { formatMoney } from "../i18n/strings";
+import { eventDescription, eventTitle, formatMoney } from "../i18n/strings";
 
 /** What Game must act on after an operational-event tick. */
 export interface OperationalEventTick {
@@ -202,8 +202,8 @@ export class OperationalEventManager {
     const event: OperationalEventData = {
       id: this.state.nextOperationalEventId(),
       type: tpl.type,
-      title: tpl.title,
-      description: tpl.description,
+      title: eventTitle(tpl.type, tpl.title),
+      description: eventDescription(tpl.type, tpl.description),
       state: "ACTIVE",
       createdAt: Date.now(),
       duration: tpl.duration,
