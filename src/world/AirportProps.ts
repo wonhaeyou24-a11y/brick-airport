@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   createCone,
+  createControlTower,
   createFenceSegment,
   createLampPost,
   createShrub,
@@ -51,6 +52,13 @@ export class AirportProps {
       shrub.position.set(x, 0.3, 17);
       this.object.add(shrub);
     }
+
+    // Control tower — a fixed landmark east of the terminal, clear of its
+    // footprint (spec's concept art). Visual-only landmark, not a
+    // BuildingType (spec §Buildings 2 — introduced as scenery this pass).
+    const tower = createControlTower();
+    tower.position.set(11, 0, 14);
+    this.object.add(tower);
   }
 
   dispose(): void {

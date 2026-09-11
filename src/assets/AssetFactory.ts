@@ -192,6 +192,52 @@ export function createShrub(color = 0x5aa469): THREE.Mesh {
   );
 }
 
+/**
+ * A small airport control tower — shaft, glazed observation cab, radar dish.
+ * Visual-only decoration (world/AirportProps.ts), not a placeable BuildingType
+ * (spec's own instruction: introduce it as scenery, not a new GameState
+ * building this pass).
+ */
+export function createControlTower(): THREE.Group {
+  const group = new THREE.Group();
+
+  const shaft = new THREE.Mesh(
+    cachedCylinder(0.55, 0.75, 6, 8),
+    brickMaterial(0xd9dde0, { roughness: 0.6 }),
+  );
+  shaft.position.y = 3;
+  shaft.castShadow = true;
+  group.add(shaft);
+
+  const cab = new THREE.Mesh(
+    cachedCylinder(1.1, 1.1, 1.3, 10),
+    brickMaterial(0x6fb8d6, { roughness: 0.25, metalness: 0.15 }),
+  );
+  cab.position.y = 6.65;
+  cab.castShadow = true;
+  group.add(cab);
+
+  const roof = new THREE.Mesh(
+    cachedCylinder(1.2, 1.2, 0.15, 10),
+    brickMaterial(0xe63946, { roughness: 0.6 }),
+  );
+  roof.position.y = 7.4;
+  group.add(roof);
+
+  const antenna = new THREE.Mesh(
+    cachedCylinder(0.03, 0.03, 1.2, 6),
+    brickMaterial(0x3a4046, { roughness: 0.5, metalness: 0.3 }),
+  );
+  antenna.position.y = 8.1;
+  group.add(antenna);
+
+  const beacon = createStud(0xffb703, 0.09);
+  beacon.position.y = 8.75;
+  group.add(beacon);
+
+  return group;
+}
+
 export function disposeAssetFactoryCache(): void {
   geoCache.forEach((g) => g.dispose());
   geoCache.clear();
