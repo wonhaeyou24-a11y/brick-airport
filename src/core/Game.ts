@@ -227,6 +227,9 @@ export class Game {
     this.cameraController.setHomeViewSize(
       expansionTier(this.state.airport.expansionLevel ?? 0).worldSize * 0.96,
     );
+    this.cameraController.setPanBounds(
+      expansionTier(this.state.airport.expansionLevel ?? 0).worldSize / 2,
+    );
 
     this.buildController = new BuildController(
       this.occupancy,
@@ -545,6 +548,7 @@ export class Game {
     this.state.airport.expansionLevel = level + 1;
     this.expansionOverlay.setLevel(level + 1);
     this.cameraController.setHomeViewSize(tier.worldSize * 0.96);
+    this.cameraController.setPanBounds(tier.worldSize / 2);
     this.hud.showNotice(
       `Airport expanded to ${tier.worldSize}×${tier.worldSize}!`,
     );
