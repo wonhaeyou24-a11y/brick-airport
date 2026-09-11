@@ -127,6 +127,11 @@ export class PassengerRoute {
     // facility, that processing step is faster. Resolved once, at spawn — a
     // facility built later helps the NEXT passengers (spec §26). The state
     // machine itself is unchanged (spec §25).
+    // Terminal capacity (V1.1-B): more terminal throughput speeds the walk
+    // through it, same diminishing-returns curve as the other facilities.
+    const terminal = facilitySpeedFactor(
+      this.state.countBuildingsByType("TERMINAL"),
+    );
     const checkIn = facilitySpeedFactor(
       this.state.countBuildingsByType("CHECK_IN"),
     );
@@ -139,7 +144,7 @@ export class PassengerRoute {
 
     if (this.data.routeType === "DEPARTURE") {
       this.steps = [
-        { state: "TO_TERMINAL", target: wp.terminalEntrance, dwell: 0.2 },
+        { state: "TO_TERMINAL", target: wp.terminalEntrance, dwell: 0.2 * terminal },
         { state: "CHECK_IN", target: wp.checkIn, dwell: 1.5 * checkIn },
         { state: "TO_GATE", target: wp.security, dwell: 0.2 * security },
         { state: "TO_GATE", target: gateApproach(park), dwell: 0.2 * security },
@@ -157,7 +162,7 @@ export class PassengerRoute {
         {
           state: "TO_TERMINAL_AFTER_ARRIVAL",
           target: wp.terminalEntrance,
-          dwell: 0.2,
+          dwell: 0.2 * terminal,
         },
         {
           state: "TO_TERMINAL_AFTER_ARRIVAL",

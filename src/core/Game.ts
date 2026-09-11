@@ -40,6 +40,7 @@ import { OperationsManager } from "../operations/OperationsManager";
 import { GroundOperationManager } from "../operations/GroundOperationManager";
 import { MissionManager } from "../missions/MissionManager";
 import { OperationalEventManager } from "../events/OperationalEventManager";
+import { FacilityManager } from "../buildings/FacilityManager";
 import {
   TURNAROUND_SEQUENCE,
   operationGlyph,
@@ -96,6 +97,7 @@ export class Game {
   private readonly groundOps: GroundOperationManager;
   private readonly missions: MissionManager;
   private readonly operationalEvents: OperationalEventManager;
+  private readonly facilities: FacilityManager;
   private readonly gateStatus: GateStatusSync;
   private readonly selection: SelectionManager;
   private readonly hud: HUD;
@@ -201,6 +203,7 @@ export class Game {
       grantMoney: (n) => this.economy.grantReward(n),
       grantReputation: (n) => this.operations.grantReputation(n),
     });
+    this.facilities = new FacilityManager(this.state);
     this.gateStatus = new GateStatusSync(this.state);
 
     this.selection = new SelectionManager(
@@ -835,6 +838,10 @@ export class Game {
     // Operational events: raise/track/resolve the short operating prompts.
     const eventTick = this.operationalEvents.update(deltaTime);
     for (const notice of eventTick.notices) this.hud.showNotice(notice);
+
+    // Facility effects: recompute only when the building list actually
+    // changed (signature-gated inside FacilityManager itself).
+    this.facilities.update();
 
     this.refreshProgression();
     this.refreshSelectionHud();
