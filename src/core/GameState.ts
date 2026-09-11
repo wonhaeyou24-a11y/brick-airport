@@ -238,6 +238,79 @@ export interface StaffData {
 }
 
 /**
+ * Missions (V1.0-A) — the player's operational objectives. Progress is READ
+ * from existing GameState counters (totalFlights, buildings.length, …), never
+ * stored twice (spec §3). Absolute targets: the mission pool escalates.
+ */
+export type MissionType =
+  | "FLIGHT_TARGET"
+  | "PASSENGER_TARGET"
+  | "REVENUE_TARGET"
+  | "BUILD_TARGET"
+  | "OPERATION_TARGET"
+  | "STAFF_TARGET";
+
+export type MissionState =
+  | "AVAILABLE"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "FAILED"
+  | "EXPIRED";
+
+export interface MissionData {
+  id: string;
+  type: MissionType;
+  title: string;
+  description: string;
+  state: MissionState;
+  target: number;
+  progress: number;
+  rewardMoney: number;
+  rewardReputation: number;
+  createdAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  expiresAt?: number;
+}
+
+/** A mission that will never change again. */
+export function isMissionOver(state: MissionState): boolean {
+  return state === "COMPLETED" || state === "FAILED" || state === "EXPIRED";
+}
+
+/**
+ * Operational events (V1.0-C) — short-lived side objectives, separate from the
+ * V0.7-E AirportEventManager flavour events (spec §C, §6). Progress is a DELTA
+ * from `baseline` (the tracked counter when the event began); `duration` /
+ * `elapsed` are game-seconds so expiry is frame-rate independent.
+ */
+export type OperationalEventType =
+  | "PASSENGER_SURGE"
+  | "STAFF_SHORTAGE"
+  | "GROUND_DELAY"
+  | "FLIGHT_DEMAND"
+  | "MAINTENANCE_REQUEST";
+
+export interface OperationalEventData {
+  id: string;
+  type: OperationalEventType;
+  title: string;
+  description: string;
+  state: "ACTIVE" | "RESOLVED" | "EXPIRED";
+  createdAt: number;
+  /** Game-seconds allowed to resolve it. */
+  duration: number;
+  /** Game-seconds since it started. */
+  elapsed: number;
+  target: number;
+  progress: number;
+  /** The tracked counter's value when the event began (progress = current − baseline). */
+  baseline: number;
+  rewardMoney: number;
+  rewardReputation: number;
+}
+
+/**
  * Live airport operating metrics (V0.7-A). Separate from the lifetime
  * accumulators (`totalRevenue` etc.) and from `reputation` — these describe the
  * airport's CURRENT service level, not its history:
@@ -269,7 +342,7 @@ export const DEFAULT_OPERATIONS: OperationsData = {
 };
 
 /** Current on-disk state schema version. Older states migrate up in the ctor. */
-export const STATE_VERSION = "0.9.0";
+export const STATE_VERSION = "1.0.0";
 
 export interface AirportData {
   id: string;
@@ -422,6 +495,10 @@ export interface GameStateData {
   groundVehicles: GroundVehicleData[];
   /** The airport staff (V0.9-A). */
   staff: StaffData[];
+  /** Player objectives, past and present (V1.0-A). */
+  missions: MissionData[];
+  /** Short-lived operational events, past and present (V1.0-C). */
+  operationalEvents: OperationalEventData[];
   /** Currently selected entity, for HUD display. */
   selection: {
     kind:
@@ -635,6 +712,8 @@ export function createInitialState(): GameStateData {
     groundOperations: [],
     groundVehicles: defaultGroundVehicles(),
     staff: defaultStaff(),
+    missions: [],
+    operationalEvents: [],
     selection: { kind: null, id: null },
     grid: { hoverCell: null, selectedCell: null },
   };
@@ -687,6 +766,9 @@ export class GameState {
     if (!this.data.staff || this.data.staff.length === 0) {
       this.data.staff = defaultStaff();
     }
+    // Forward-compat: a state saved before V1.0 has no missions / events.
+    if (!this.data.missions) this.data.missions = [];
+    if (!this.data.operationalEvents) this.data.operationalEvents = [];
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
   }
@@ -1085,6 +1167,74 @@ export class GameState {
     return this.data.staff.find(
       (s) => s.role === role && s.state === "IDLE" && !s.operationId,
     );
+  }
+
+  // -------------------------------------------------------------- missions
+
+  /** A fresh, collision-free mission id like "mission-001". */
+  nextMissionId(): string {
+    let max = 0;
+    for (const m of this.data.missions) {
+      const n = /(\d+)$/.exec(m.id);
+      if (n) max = Math.max(max, parseInt(n[1], 10));
+    }
+    return `mission-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  addMission(mission: MissionData): void {
+    this.data.missions.push(mission);
+  }
+
+  getMission(id: string | null | undefined): MissionData | undefined {
+    if (!id) return undefined;
+    return this.data.missions.find((m) => m.id === id);
+  }
+
+  /** Shallow-merge a patch into a mission. No-op if the id is unknown. */
+  updateMission(id: string, patch: Partial<MissionData>): void {
+    const mission = this.getMission(id);
+    if (mission) Object.assign(mission, patch);
+  }
+
+  /**
+   * Mark a mission COMPLETED. Idempotent — a mission that is already over never
+   * transitions again, so the reward is paid exactly once (spec §12).
+   */
+  completeMission(id: string): boolean {
+    const mission = this.getMission(id);
+    if (!mission || mission.state !== "ACTIVE") return false;
+    mission.state = "COMPLETED";
+    mission.completedAt = Date.now();
+    return true;
+  }
+
+  /** Mark a mission FAILED / EXPIRED. Idempotent; never pays a reward. */
+  failMission(id: string, expired = false): void {
+    const mission = this.getMission(id);
+    if (!mission || isMissionOver(mission.state)) return;
+    mission.state = expired ? "EXPIRED" : "FAILED";
+    mission.completedAt = Date.now();
+  }
+
+  // ------------------------------------------------------ operational events
+
+  /** A fresh, collision-free operational-event id like "opevt-001". */
+  nextOperationalEventId(): string {
+    let max = 0;
+    for (const e of this.data.operationalEvents) {
+      const n = /(\d+)$/.exec(e.id);
+      if (n) max = Math.max(max, parseInt(n[1], 10));
+    }
+    return `opevt-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  addOperationalEvent(event: OperationalEventData): void {
+    this.data.operationalEvents.push(event);
+  }
+
+  getOperationalEvent(id: string | null | undefined): OperationalEventData | undefined {
+    if (!id) return undefined;
+    return this.data.operationalEvents.find((e) => e.id === id);
   }
 
   setSelection(
