@@ -17,6 +17,17 @@ const STATUS_LIGHT_COLOR: Record<GateStatus, number> = {
   READY: 0x3ec95c, // bright green — cleared for pushback
   DEPARTING: 0x4aa8ff, // blue — pushing back / taxiing out
 };
+/** AVAILABLE-but-an-aircraft-is-inbound tint (V1.9 §8) — a distinct color
+ * reusing the existing AVAILABLE status (no new GateStatus value), the same
+ * "접근 중" condition Game.describeSelectable already computes. */
+const INBOUND_LIGHT_COLOR = 0x6fb4e0;
+
+/** Jet bridge local Z: home (retracted, toward the terminal) and reaching
+ * down toward a parked aircraft (V1.9 §9). Animated, not snapped, via
+ * Gate.tickAnimation() — ticked by AirportWorld.update(). */
+const BRIDGE_HOME_Z = 1.6;
+const BRIDGE_EXTENDED_Z = 0.95;
+const BRIDGE_TRAVEL_PER_SECOND = 1.4; // full extend/retract in ~0.5s
 
 /**
  * Gate — brick-toy aircraft stand (V1.3-B upgrade of the V0.1 placeholder):
@@ -33,8 +44,17 @@ const STATUS_LIGHT_COLOR: Record<GateStatus, number> = {
  * assigned inside build() would be clobbered back to its initial value the
  * moment construction finished. */
 const STATUS_BEACON_NAME = "gate-status-beacon";
+const JET_BRIDGE_NAME = "gate-jet-bridge";
 
 export class Gate extends Building {
+  /** 0 = retracted, 1 = fully extended. Only ever mutated from
+   * setBoardingActive()/tickAnimation() — both called after construction
+   * finishes, so this never collides with the build()-clobber issue the
+   * beacon comment above describes (spec keeps GameState as the only source
+   * of truth; this is purely how far along the cosmetic animation is). */
+  private bridgeExtension = 0;
+  private bridgeTarget = 0;
+
   protected build(group: THREE.Group): void {
     // Gate pad
     const pad = new THREE.Mesh(
@@ -56,12 +76,15 @@ export class Gate extends Building {
     stopLine.position.set(0, 0.26, -0.7);
     group.add(stopLine);
 
-    // Jet bridge stub, reaching toward +Z (toward the terminal)
+    // Jet bridge stub, reaching toward +Z (toward the terminal) at rest;
+    // Gate.tickAnimation() slides it toward BRIDGE_EXTENDED_Z while boarding
+    // is active (V1.9 §9), read fresh from GateStatus each time it changes.
     const bridge = new THREE.Mesh(
       new THREE.BoxGeometry(0.9, 0.9, 2.2),
       brickMaterial(COLORS.gateBridge, { roughness: 0.5 }),
     );
-    bridge.position.set(0, 1.1, 1.6);
+    bridge.name = JET_BRIDGE_NAME;
+    bridge.position.set(0, 1.1, BRIDGE_HOME_Z);
     bridge.castShadow = true;
     group.add(bridge);
 
@@ -107,20 +130,56 @@ export class Gate extends Building {
     group.add(beacon);
   }
 
-  /** Read-only recolor of the status beacon; never touches GateData. */
-  setStatusLight(status: GateStatus): void {
+  /**
+   * Read-only recolor of the status beacon; never touches GateData.
+   * `inbound` (V1.9 §8) is the same "aircraft approaching, not parked yet"
+   * condition Game.describeSelectable already computes for the Gate
+   * selection panel — reusing it here, not a new GateStatus value.
+   */
+  setStatusLight(status: GateStatus, inbound = false): void {
     const beacon = this.object.getObjectByName(STATUS_BEACON_NAME) as
       | THREE.Mesh
       | undefined;
     const mat = beacon?.material as THREE.MeshStandardMaterial | undefined;
     if (!mat) return;
-    const color = STATUS_LIGHT_COLOR[status] ?? STATUS_LIGHT_COLOR.AVAILABLE;
+    const color =
+      inbound && status === "AVAILABLE"
+        ? INBOUND_LIGHT_COLOR
+        : (STATUS_LIGHT_COLOR[status] ?? STATUS_LIGHT_COLOR.AVAILABLE);
     mat.color.setHex(color);
     mat.emissive.setHex(color);
     mat.emissiveIntensity = 0.9;
   }
 
+  /** Aim the jet-bridge animation at extended/retracted (V1.9 §9); the
+   * actual mesh movement happens gradually in tickAnimation(). */
+  setBoardingActive(active: boolean): void {
+    this.bridgeTarget = active ? 1 : 0;
+  }
+
+  /** Cosmetic-only per-frame step, called by AirportWorld.update() for every
+   * Gate. No-ops the moment the bridge reaches its target (spec §27 — no
+   * per-frame work once an animation settles). */
+  tickAnimation(deltaTime: number): void {
+    if (this.bridgeExtension === this.bridgeTarget) return;
+    const dir = this.bridgeTarget > this.bridgeExtension ? 1 : -1;
+    const step = BRIDGE_TRAVEL_PER_SECOND * deltaTime;
+    this.bridgeExtension = clamp01(this.bridgeExtension + dir * step);
+    if (Math.abs(this.bridgeExtension - this.bridgeTarget) < 0.01) {
+      this.bridgeExtension = this.bridgeTarget;
+    }
+    const bridge = this.object.getObjectByName(JET_BRIDGE_NAME);
+    if (bridge) {
+      bridge.position.z =
+        BRIDGE_HOME_Z + (BRIDGE_EXTENDED_Z - BRIDGE_HOME_Z) * this.bridgeExtension;
+    }
+  }
+
   getSelectionLabel(): string {
     return t("gate");
   }
+}
+
+function clamp01(n: number): number {
+  return n < 0 ? 0 : n > 1 ? 1 : n;
 }

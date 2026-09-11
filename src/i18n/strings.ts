@@ -257,6 +257,18 @@ const EVENT_TEXT_KO: Record<string, { title: string; description: string }> = {
     title: "직원 부족",
     description: "인력이 부족합니다 — 직원을 추가로 채용하세요.",
   },
+  // AirportEventType (V0.7-E flavour events) — a separate enum from
+  // OperationalEventType above, but reusing this same lookup: no reason for
+  // two dictionaries when the wording fits (V1.9 §22 localization cleanup —
+  // these two titles/descriptions had been left in English since V0.7).
+  FLIGHT_DELAY: {
+    title: "항공편 지연",
+    description: "출발이 지연되었습니다.",
+  },
+  SERVICE_BONUS: {
+    title: "서비스 보너스",
+    description: "직원들의 컨디션이 좋습니다 — 서비스와 만족도가 상승합니다.",
+  },
 };
 
 export function eventTitle(type: string, enTitle: string, locale: Locale = CURRENT_LOCALE): string {

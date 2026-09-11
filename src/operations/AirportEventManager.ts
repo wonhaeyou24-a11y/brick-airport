@@ -1,6 +1,7 @@
 import type { GameState } from "../core/GameState";
 import { isFlightOver } from "../core/GameState";
 import { OPERATIONS_CONFIG as C } from "./OperationsConfig";
+import { cityLabel, eventDescription, eventTitle } from "../i18n/strings";
 
 /**
  * AirportEventManager — small operating events (V0.7-E). Pure logic: no
@@ -132,23 +133,23 @@ export class AirportEventManager {
       flight.delayed = true;
       return this.make(
         type,
-        `Flight ${flight.id} delayed`,
-        `${flight.origin} → ${flight.destination} pushed back`,
+        eventTitle(type, `Flight ${flight.id} delayed`),
+        `${cityLabel(flight.origin)} → ${cityLabel(flight.destination)} ${flight.id} 출발이 지연되었습니다.`,
       );
     }
 
     if (type === "PASSENGER_SURGE") {
       return this.make(
         type,
-        "Passenger surge!",
-        "A wave of extra travellers — more flights inbound.",
+        eventTitle(type, "Passenger surge!"),
+        eventDescription(type, "A wave of extra travellers — more flights inbound."),
       );
     }
 
     return this.make(
       type,
-      "Service bonus!",
-      "Staff are on top form — service and satisfaction lifted.",
+      eventTitle(type, "Service bonus!"),
+      eventDescription(type, "Staff are on top form — service and satisfaction lifted."),
     );
   }
 

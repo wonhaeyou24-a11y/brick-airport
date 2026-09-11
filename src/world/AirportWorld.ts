@@ -13,10 +13,27 @@ import { Gate } from "../buildings/Gate";
 import { ServiceFacility } from "../buildings/ServiceFacility";
 import { isServiceFacility } from "../core/GameState";
 
+/** Seconds a freshly-placed building takes to "pop" up to full size (V1.9 §14). */
+const POP_IN_DURATION = 0.35;
+
+/** Ease-out-back — a small overshoot past 1.0 before settling, so a new
+ * building reads as a block snapping into place rather than just fading in. */
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const x = t - 1;
+  return 1 + c3 * x * x * x + c1 * x * x;
+}
+
 /**
  * AirportWorld — builds the static scenery (ground, grid, buildings) from
  * GameState and exposes it as one group plus a list of selectable buildings.
- * No per-frame logic: buildings are static in V0.1.
+ *
+ * update() (V1.9) is deliberately small: it ticks the couple of purely
+ * cosmetic per-frame animations that live at the world level — each Gate's
+ * jet-bridge extension and a brief pop-in scale for a just-placed building —
+ * neither of which touches GameState (spec §28's Mesh-is-not-source-of-truth
+ * rule). Everything else here still loads once from GameState, same as V0.1.
  */
 export class AirportWorld {
   readonly group: THREE.Group;
@@ -27,6 +44,9 @@ export class AirportWorld {
   private readonly taxiway: Taxiway;
   private readonly props: AirportProps;
   private readonly buildings: Building[] = [];
+  /** Buildings mid pop-in-scale animation (V1.9 §14) — empty almost always;
+   * only ever grows right after a runtime addBuilding() call. */
+  private readonly poppingIn: { obj: THREE.Object3D; elapsed: number }[] = [];
 
   constructor(state: GameState) {
     this.group = new THREE.Group();
@@ -74,7 +94,35 @@ export class AirportWorld {
     if (!building) return null;
     this.buildings.push(building);
     this.group.add(building.object);
+    // Pop-in feedback (V1.9 §14) — only for a building placed THIS session;
+    // buildings loaded from a save (the constructor's own loop above) start
+    // at full scale, no animation, since they were not "just built".
+    building.object.scale.setScalar(0.05);
+    this.poppingIn.push({ obj: building.object, elapsed: 0 });
     return building;
+  }
+
+  /**
+   * Per-frame cosmetic tick (V1.9): Gate jet-bridge animation + the
+   * construction pop-in. Cheap even when nothing is animating — the
+   * pop-in list is empty almost all the time and this never allocates.
+   */
+  update(deltaTime: number): void {
+    for (const b of this.buildings) {
+      if (b instanceof Gate) b.tickAnimation(deltaTime);
+    }
+
+    for (let i = this.poppingIn.length - 1; i >= 0; i--) {
+      const p = this.poppingIn[i];
+      p.elapsed += deltaTime;
+      const t = Math.min(1, p.elapsed / POP_IN_DURATION);
+      const scale = 0.05 + (1 - 0.05) * easeOutBack(t);
+      p.obj.scale.setScalar(Math.max(0.05, scale));
+      if (t >= 1) {
+        p.obj.scale.setScalar(1);
+        this.poppingIn.splice(i, 1);
+      }
+    }
   }
 
   setGridVisible(visible: boolean): void {

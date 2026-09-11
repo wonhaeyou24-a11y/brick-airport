@@ -18,8 +18,9 @@ import {
 } from "./GroundOperation";
 import { computeGroundEfficiency } from "./AirportOperations";
 import { OPERATIONS_CONFIG as C } from "./OperationsConfig";
-import { roleForOperation, staffSkillModifier } from "../staff/StaffConfig";
+import { roleForOperation, staffRoleLabel, staffSkillModifier } from "../staff/StaffConfig";
 import type { GroundVehicleType } from "../core/GameState";
+import { stateLabel } from "../i18n/strings";
 
 /** What Game must act on after a ground-operations tick. */
 export interface GroundOperationsTick {
@@ -46,14 +47,6 @@ const OP_ICON: Record<string, string> = {
   REFUELING: "⛽",
   BOARDING_SERVICE: "👥",
 };
-
-function opWords(type: string): string {
-  return type
-    .toLowerCase()
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 /**
  * GroundOperationManager — the aircraft-turnaround orchestrator (V0.8-C).
@@ -204,7 +197,7 @@ export class GroundOperationManager {
             op.startedAt = Date.now();
             op.duration = this.workDuration(op);
             notices.push(
-              `${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} started`,
+              `${OP_ICON[op.type] ?? "🔧"} ${stateLabel(op.type)} 시작`,
             );
           }
           break;
@@ -240,7 +233,7 @@ export class GroundOperationManager {
         !this.staffRequiredAnnounced.has(role)
       ) {
         this.staffRequiredAnnounced.add(role);
-        notices.push(`⚠ Staff required: ${opWords(role)}`);
+        notices.push(`⚠ 직원 필요: ${staffRoleLabel(role)}`);
       }
       return;
     }
@@ -283,7 +276,7 @@ export class GroundOperationManager {
     const role = roleForOperation(op.type);
     this.state.completeGroundOperation(op.id); // clears vehicleId + staffId
     this.recordCompletion(op);
-    notices.push(`${OP_ICON[op.type] ?? "🔧"} ${opWords(op.type)} completed`);
+    notices.push(`${OP_ICON[op.type] ?? "🔧"} ${stateLabel(op.type)} 완료`);
 
     // Shuttle the vehicle / staff straight to another gate that needs them,
     // else send them home.
@@ -365,7 +358,7 @@ export class GroundOperationManager {
       const ops = this.state.getGroundOperationsForFlight(flightId);
       if (ops.length === 0) continue;
       if (ops.every((o) => o.state === "COMPLETED")) {
-        notices.push(`✈ Flight ${flightId} ready for departure`);
+        notices.push(`✈ ${flightId} 출발 준비 완료`);
         this.readyAnnounced.add(flightId);
       }
     }

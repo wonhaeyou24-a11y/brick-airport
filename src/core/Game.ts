@@ -81,6 +81,7 @@ import type { Selectable } from "../selection/Selectable";
 import type { StaffRole } from "./GameState";
 import { HUD, type SelectionInfo, type ActiveFlightEntry, type ActionItem } from "../ui/HUD";
 import { Gate } from "../buildings/Gate";
+import { AudioManager } from "../audio/AudioManager";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
 
 /**
@@ -154,6 +155,8 @@ export class Game {
   private readonly hud: HUD;
   private readonly buildMenu: BuildMenu;
   private readonly loop: GameLoop;
+  /** V1.9 §24 — synthesized (license-free) UI/feedback tones. */
+  private readonly audio = new AudioManager();
 
   /** Signature of the currently displayed aircraft selection, for live HUD. */
   private shownAircraftSig = "";
@@ -181,6 +184,12 @@ export class Game {
   private shownGateVisualsSig = "";
   /** Signature of the "확인 필요" Action Center (V1.8 §8). */
   private shownActionCenterSig = "";
+  /** One-shot expansion-complete ring pulse (V1.9 §15) — null when idle. */
+  private expansionPulse: {
+    mesh: THREE.Mesh;
+    material: THREE.MeshBasicMaterial;
+    elapsed: number;
+  } | null = null;
   /** Signature of the Missions panel (V1.0-E). */
   private shownMissionsSig = "";
   /** Signature of the Operational Events panel (V1.0-E). */
@@ -284,10 +293,12 @@ export class Game {
       // moments of the turnaround loop, priority 1 so a busy ground-ops toast
       // never swallows them.
       onAircraftTakeoff: (flight) => {
-        this.hud.showNotice(`✈ ${flight.id} 이륙 · ${flightRoute(flight)}`, 2400, 1);
+        this.hud.showNotice(`✈ ${flight.id} 이륙 · ${flightRoute(flight)}`, 2400, 1, "important");
+        this.audio.playTakeoff();
       },
       onAircraftArrived: (aircraft) => {
-        this.hud.showNotice(`✈ ${aircraft.type} 항공기 도착`, 2400, 1);
+        this.hud.showNotice(`✈ ${aircraft.type} 항공기 도착`, 2400, 1, "important");
+        this.audio.playLanding();
       },
     });
 
@@ -324,16 +335,20 @@ export class Game {
     this.selection.onHover((point) => this.onHoverGround(point));
     this.selection.onGroundTap((point) => this.onGroundTap(point));
 
-    this.hud = new HUD(hudContainer, {
-      onZoomIn: () => this.cameraController.zoomBy(1 / 1.25),
-      onZoomOut: () => this.cameraController.zoomBy(1.25),
-      onReset: () => this.cameraController.reset(),
-      onToggleGrid: () =>
-        this.world.setGridVisible(!this.world.isGridVisible()),
-      onSave: () => this.save(),
-      onLoad: () => this.requestLoad(),
-      onActionClick: (item) => this.onActionClick(item),
-    });
+    this.hud = new HUD(
+      hudContainer,
+      {
+        onZoomIn: () => this.cameraController.zoomBy(1 / 1.25),
+        onZoomOut: () => this.cameraController.zoomBy(1.25),
+        onReset: () => this.cameraController.reset(),
+        onToggleGrid: () =>
+          this.world.setGridVisible(!this.world.isGridVisible()),
+        onSave: () => this.save(),
+        onLoad: () => this.requestLoad(),
+        onActionClick: (item) => this.onActionClick(item),
+      },
+      this.audio,
+    );
     this.refreshHudStats();
     this.refreshStatistics();
 
@@ -361,6 +376,11 @@ export class Game {
 
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
+    // Autoplay-safe audio unlock (spec §24) — the very first real gesture
+    // anywhere on the page, then never again.
+    window.addEventListener("pointerdown", () => this.audio.unlock(), {
+      once: true,
+    });
 
     if (bootNotice) this.hud.showNotice(bootNotice, 4000);
   }
@@ -530,6 +550,7 @@ export class Game {
         benefit ? `${name} 건설 완료\n${benefit}` : `${name} 건설 완료`,
         2200,
         3,
+        "success",
       );
       this.requestEventSave(); // a free console placeBuilding() doesn't count
     }
@@ -624,9 +645,61 @@ export class Game {
       `공항 확장 완료!\n${fromTier.worldSize}×${fromTier.worldSize} → ${tier.worldSize}×${tier.worldSize}`,
       3200,
       1,
+      "success",
     );
+    this.spawnExpansionPulse(tier.worldSize);
+    this.audio.playConstruction();
     this.requestEventSave();
     return true;
+  }
+
+  /**
+   * A brief expanding, fading ring at the new boundary (V1.9 §15) — pure
+   * presentation, one mesh, disposed the moment it finishes. Does not touch
+   * the camera (spec's own warning not to replace/rewire the existing
+   * CameraController) — the ExpansionOverlay's dim-frame shrink and this
+   * session's own "공항 확장 완료!" notice already carry that.
+   */
+  private spawnExpansionPulse(worldSize: number): void {
+    if (this.expansionPulse) {
+      this.scene.remove(this.expansionPulse.mesh);
+      this.expansionPulse.mesh.geometry.dispose();
+      this.expansionPulse.material.dispose();
+      this.expansionPulse = null;
+    }
+    const radius = worldSize / 2;
+    const geometry = new THREE.RingGeometry(radius * 0.94, radius, 64);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffd23f,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = 0.05;
+    this.scene.add(mesh);
+    this.expansionPulse = { mesh, material, elapsed: 0 };
+  }
+
+  /** Ticks the ring above; a no-op most frames since it only ever exists for
+   * ~1s right after an expansion (spec §27 — no per-frame cost once idle). */
+  private tickExpansionPulse(deltaTime: number): void {
+    const pulse = this.expansionPulse;
+    if (!pulse) return;
+    const duration = 1.1;
+    pulse.elapsed += deltaTime;
+    const t = Math.min(1, pulse.elapsed / duration);
+    const scale = 1 + t * 0.12;
+    pulse.mesh.scale.set(scale, 1, scale);
+    pulse.material.opacity = 0.9 * (1 - t);
+    if (t >= 1) {
+      this.scene.remove(pulse.mesh);
+      pulse.mesh.geometry.dispose();
+      pulse.material.dispose();
+      this.expansionPulse = null;
+    }
   }
 
   private addLights(): void {
@@ -667,7 +740,7 @@ export class Game {
   hireStaff(role: StaffRole): boolean {
     const cfg = staffRoleConfig(role);
     if (!this.state.spendMoney(cfg.hiringCost)) {
-      this.hud.showNotice("Not enough money", 2600, 1);
+      this.hud.showNotice("잔액이 부족합니다", 2600, 1);
       return false;
     }
     this.hud.showSpend(cfg.hiringCost);
@@ -701,7 +774,7 @@ export class Game {
       speed: STAFF_CONFIG.speed,
     });
     this.refreshHudStats();
-    this.hud.showNotice(`${name} 채용됨 · ${staffRoleLabel(role)}`, 2600, 3);
+    this.hud.showNotice(`${name} 채용됨 · ${staffRoleLabel(role)}`, 2600, 3, "success");
     return true;
   }
 
@@ -1116,6 +1189,10 @@ export class Game {
 
   private update(deltaTime: number): void {
     this.cameraController.update(deltaTime);
+    // World-level cosmetic animation (V1.9): gate jet-bridges + construction
+    // pop-in. Purely visual — see AirportWorld.update()'s own doc comment.
+    this.world.update(deltaTime);
+    this.tickExpansionPulse(deltaTime);
     this.flightScheduler.update(deltaTime);
     this.aircraftManager.update(deltaTime);
     this.passengerManager.update(deltaTime);
@@ -1143,7 +1220,9 @@ export class Game {
 
     // Missions: keep the objective queue filled, track progress, pay rewards.
     const missionTick = this.missions.update(deltaTime);
-    for (const notice of missionTick.notices) this.hud.showNotice(notice, 2600, 1);
+    for (const notice of missionTick.notices) {
+      this.hud.showNotice(notice, 2600, 1, "success");
+    }
     if (missionTick.notices.length > 0) this.requestEventSave();
 
     // Operational events: raise/track/resolve the short operating prompts.
@@ -1315,13 +1394,24 @@ export class Game {
    * per-gate status signature changes.
    */
   private refreshGateVisuals(): void {
-    const sig = this.state.data.gates.map((g) => g.status).join(",");
+    // `inbound` (V1.9 §8) is the exact same "reserved but not parked yet"
+    // read describeSelectable() already uses for the Gate panel's "(접근
+    // 중)" line — reused here, not a second computation of a new concept.
+    const rows = this.state.data.gates.map((gate) => {
+      const ac = gate.aircraftId ? this.state.getAircraft(gate.aircraftId) : undefined;
+      const inbound = gate.status === "AVAILABLE" && !!ac && ac.state !== "PARKED";
+      return { gate, inbound };
+    });
+    const sig = rows.map((r) => `${r.gate.status}:${r.inbound}`).join(",");
     if (sig === this.shownGateVisualsSig) return;
     this.shownGateVisualsSig = sig;
 
-    for (const gate of this.state.data.gates) {
+    for (const { gate, inbound } of rows) {
       const obj = this.world.getBuildingObject(gate.buildingId);
-      if (obj instanceof Gate) obj.setStatusLight(gate.status);
+      if (obj instanceof Gate) {
+        obj.setStatusLight(gate.status, inbound);
+        obj.setBoardingActive(gate.status === "BOARDING");
+      }
     }
   }
 
@@ -1477,7 +1567,7 @@ export class Game {
     if (target <= a.level) return; // only ever rises; write only on change
     const previousLevel = a.level;
     a.level = target;
-    this.hud.showNotice(this.levelUpMessage(previousLevel, target), 3600, 1);
+    this.hud.showNotice(this.levelUpMessage(previousLevel, target), 3600, 1, "success");
     this.refreshHudStats();
     this.requestEventSave();
   }

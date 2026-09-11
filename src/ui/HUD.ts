@@ -1,9 +1,12 @@
 /**
  * HUD — HTML/CSS overlay. Pure view: it renders values it is handed and
  * emits button intents via callbacks. It holds no game state and never
- * touches Three.js.
+ * touches Three.js. The one exception (V1.9 §24-25) is a synthesized-tone
+ * AudioManager, which is presentation feedback in exactly the same sense as
+ * the CSS fade this class already drives — it carries no game logic either.
  */
 import { formatMoney, formatMoneyDelta, stateLabel, t } from "../i18n/strings";
+import type { AudioManager, NoticeTone } from "../audio/AudioManager";
 
 export interface HudStats {
   airportName: string;
@@ -238,7 +241,11 @@ export class HUD {
    * can map a clicked row index back to its item (V1.8 §10). */
   private actionItems: ActionItem[] = [];
 
-  constructor(container: HTMLElement, callbacks: HudCallbacks) {
+  constructor(
+    container: HTMLElement,
+    callbacks: HudCallbacks,
+    private readonly audio: AudioManager,
+  ) {
     this.root = container;
     this.root.innerHTML = buildTemplate();
 
@@ -305,6 +312,14 @@ export class HUD {
       const item = Number.isInteger(idx) ? this.actionItems[idx] : undefined;
       if (item && item.kind !== "INFO") callbacks.onActionClick(item);
     });
+
+    // UI click tone (V1.9 §24) — one delegated listener catches every
+    // brick-style button in the shared HUD container, including BuildMenu's
+    // (its panel is appended into this same container — see Game's
+    // construction order), so no per-button wiring is needed anywhere else.
+    this.root.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).closest(".brick-btn")) this.audio.playClick();
+    });
   }
 
   /** Save-status badge next to the airport title (spec §E.1). */
@@ -362,10 +377,23 @@ export class HUD {
    * is still showing, an equal-or-lower priority one is dropped instead of
    * cutting it off. Same-or-higher priority always shows (so a second
    * important notice, or the same tier, still gets through as before).
+   *
+   * `tone` (V1.9 §25, optional) picks the audio cue; when omitted it derives
+   * from `priority` (1→"important", 2→"warning", 3→"info") so the ~15
+   * existing call sites across Game.ts need no change to get a sound. A
+   * handful of clearly-positive milestones (level up, expansion, mission
+   * complete) pass "success" explicitly instead. The tone only ever plays
+   * when the notice actually shows — never for one the guard above drops —
+   * so audio never fires for a toast the player didn't see.
    */
-  showNotice(text: string, ms = 2600, priority: NoticePriority = 2): void {
+  showNotice(
+    text: string,
+    ms = 2600,
+    priority: NoticePriority = 2,
+    tone?: NoticeTone,
+  ): boolean {
     const now = performance.now();
-    if (now < this.noticeGuardUntil && priority > this.noticePriority) return;
+    if (now < this.noticeGuardUntil && priority > this.noticePriority) return false;
 
     this.noticePriority = priority;
     this.noticeGuardUntil = now + ms;
@@ -384,6 +412,11 @@ export class HUD {
         this.noticeEl.hidden = true;
       }, 300);
     }, ms);
+
+    const defaultTone: NoticeTone =
+      priority === 1 ? "important" : priority === 2 ? "warning" : "info";
+    this.audio.playNotice(tone ?? defaultTone);
+    return true;
   }
 
   /**

@@ -60,6 +60,9 @@ export class Aircraft implements Selectable {
   private readonly gear: THREE.Mesh[] = [];
   private beaconMat: THREE.MeshStandardMaterial | null = null;
   private animClock = 0;
+  /** Cosmetic nose pitch (V1.9 §6) — smoothed toward a per-state target each
+   * frame; never read anywhere, never written back to `data`. */
+  private pitch = 0;
 
   constructor(data: AircraftData) {
     this.data = data;
@@ -167,8 +170,11 @@ export class Aircraft implements Selectable {
       this.gear.push(strut);
     }
 
-    // Tail beacon — blinks (spec §13).
+    // Tail beacon — blinks (spec §13). Emissive color set once here, never
+    // per frame (V1.9 §27 perf pass) — tickAnimation only ever toggles
+    // emissiveIntensity on this same Color instance.
     this.beaconMat = brickMaterial(0xe63946, { roughness: 0.3 }).clone();
+    this.beaconMat.emissive.setHex(0xe63946);
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 8, 6), this.beaconMat);
     beacon.position.set(-1.5 * s, 1.95 * s, 0);
     group.add(beacon);
@@ -226,7 +232,10 @@ export class Aircraft implements Selectable {
     return false;
   }
 
-  /** Engine spin, gear retraction, beacon blink — reads data.state, never writes it. */
+  /**
+   * Engine spin, gear retraction, beacon blink, nose pitch (V1.9 §6) — every
+   * line here only reads data.state, never writes it (spec §28).
+   */
   private tickAnimation(deltaTime: number): void {
     this.animClock += deltaTime;
 
@@ -237,9 +246,17 @@ export class Aircraft implements Selectable {
 
     if (this.beaconMat) {
       const phase = (this.animClock % BLINK_PERIOD) / BLINK_PERIOD;
-      this.beaconMat.emissive = new THREE.Color(0xe63946);
+      // Reuse the existing Color instance (perf rule §27) — only the
+      // intensity actually needs to change frame to frame.
       this.beaconMat.emissiveIntensity = phase < 0.5 ? 1 : 0.15;
     }
+
+    // Nose pitch — a small, purely cosmetic lean, smoothed so it never pops
+    // (spec §6's "runway acceleration / 약간의 nose-up" and landing flare).
+    const targetPitch =
+      this.data.state === "TAKEOFF" ? 0.12 : this.data.state === "LANDING" ? 0.05 : 0;
+    this.pitch += (targetPitch - this.pitch) * Math.min(1, deltaTime * 3);
+    this.object.rotation.z = this.pitch;
   }
 
   setHighlighted(highlighted: boolean): void {
