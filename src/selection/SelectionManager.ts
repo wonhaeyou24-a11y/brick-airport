@@ -43,10 +43,20 @@ export class SelectionManager {
     /** Supplier so the list can grow/shrink as the game does. */
     private readonly getSelectables: () => Selectable[],
   ) {
+    // pointerdown/pointermove (hover) only make sense while the cursor is
+    // actually over the 3D world, so they stay canvas-scoped. pointerup/
+    // pointercancel move to window (V1.9-D root-cause fix): a tap/drag that
+    // started on canvas commonly ends with the button released over a HUD
+    // panel — canvas-only listeners never saw that "up", leaving
+    // activePointerCount stuck above 0 forever and every later tap
+    // misclassified as part of an in-progress multi-touch gesture, so clicks
+    // silently stopped selecting anything. The pointerId check already in
+    // onPointerUp/onPointerCancel makes listening on window safe for events
+    // unrelated to a canvas-started candidate.
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
     this.canvas.addEventListener("pointermove", this.onPointerMove);
-    this.canvas.addEventListener("pointerup", this.onPointerUp);
-    this.canvas.addEventListener("pointercancel", this.onPointerCancel);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerCancel);
     this.canvas.addEventListener("pointerleave", this.onPointerLeave);
   }
 
@@ -82,8 +92,8 @@ export class SelectionManager {
   dispose(): void {
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
-    this.canvas.removeEventListener("pointerup", this.onPointerUp);
-    this.canvas.removeEventListener("pointercancel", this.onPointerCancel);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerCancel);
     this.canvas.removeEventListener("pointerleave", this.onPointerLeave);
     this.selectionListeners.length = 0;
     this.hoverListeners.length = 0;

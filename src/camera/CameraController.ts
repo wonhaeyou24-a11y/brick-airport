@@ -77,10 +77,20 @@ export class CameraController {
     this.applyTransform();
 
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    // A drag only ever STARTS on the 3D world, so pointerdown stays scoped to
+    // the canvas (a press on a HUD button must not begin a pan). But its
+    // pointermove/up must be tracked on window (V1.9-D root-cause fix): once
+    // a gesture is under way, the cursor commonly drifts over a HUD panel
+    // before the button is released — with these on canvas only, that "up"
+    // was never seen, leaving `activePointers` permanently polluted and every
+    // later pointerdown misread as the second finger of a pinch instead of a
+    // fresh pan. window always sees the up/move regardless of what element is
+    // under the cursor; the pointerId guards already in each handler make
+    // this safe for events that never had a matching canvas pointerdown.
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
-    this.canvas.addEventListener("pointermove", this.onPointerMove);
-    this.canvas.addEventListener("pointerup", this.onPointerUp);
-    this.canvas.addEventListener("pointercancel", this.onPointerUp);
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
   }
 
   /** Called on window resize. */
@@ -177,9 +187,9 @@ export class CameraController {
   dispose(): void {
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
-    this.canvas.removeEventListener("pointermove", this.onPointerMove);
-    this.canvas.removeEventListener("pointerup", this.onPointerUp);
-    this.canvas.removeEventListener("pointercancel", this.onPointerUp);
+    window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
     this.activePointers.clear();
   }
 
