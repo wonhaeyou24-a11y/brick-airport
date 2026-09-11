@@ -4,6 +4,7 @@ import { Ground } from "./Ground";
 import { Grid } from "./Grid";
 import { ServiceRoad } from "./ServiceRoad";
 import { Taxiway } from "./Taxiway";
+import { Apron } from "./Apron";
 import { AirportProps } from "./AirportProps";
 import { disposePaletteCache } from "./materials";
 import { Building } from "../buildings/Building";
@@ -42,6 +43,7 @@ export class AirportWorld {
   private readonly grid: Grid;
   private readonly serviceRoad: ServiceRoad;
   private readonly taxiway: Taxiway;
+  private readonly apron: Apron;
   private readonly props: AirportProps;
   private readonly buildings: Building[] = [];
   /** Buildings mid pop-in-scale animation (V1.9 §14) — empty almost always;
@@ -60,6 +62,9 @@ export class AirportWorld {
 
     this.serviceRoad = new ServiceRoad();
     this.group.add(this.serviceRoad.object);
+
+    this.apron = new Apron();
+    this.group.add(this.apron.object);
 
     this.taxiway = new Taxiway();
     this.group.add(this.taxiway.object);
@@ -137,6 +142,7 @@ export class AirportWorld {
     for (const b of this.buildings) b.dispose();
     this.buildings.length = 0;
     this.serviceRoad.dispose();
+    this.apron.dispose();
     this.taxiway.dispose();
     this.props.dispose();
     this.grid.dispose();

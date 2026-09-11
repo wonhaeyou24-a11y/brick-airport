@@ -63,6 +63,12 @@ export const COLORS = {
   // Taxiway (V1.7 §7) — sits between the runway and the apron/service lanes.
   taxiway: 0x585c64,
   taxiwayMarking: 0xf6c945,
+  // Apron (V2.0 STEP 1 REWORK §20) — the paved ramp connecting terminal,
+  // gates, and taxiway; lighter than the taxiway/runway so it still reads as
+  // a distinct "gate ramp" surface in the isometric view.
+  apron: 0xc3c9cd,
+  apronMarking: 0xf7f7f7,
+  apronMarkingYellow: 0xf6c945,
 } as const;
 
 export function disposePaletteCache(): void {

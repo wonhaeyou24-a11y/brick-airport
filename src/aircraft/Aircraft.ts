@@ -93,9 +93,17 @@ export class Aircraft implements Selectable {
     const variant = variantFor(this.data.capacity ?? 6);
     const spec = VARIANT_SPEC[variant];
     const s = spec.scale * SIZE_BOOST;
+    // Stretches only the length axis (fuselage/nose/cockpit/tail/gear X
+    // offsets) so the plane reads as a lean real-aircraft silhouette instead
+    // of "short and thick" (V2.0 STEP 1 REWORK §13), without touching the
+    // wingspan or fuselage diameter set above.
+    const L = 1.25;
+    const fuselageRadius = 0.35 * s;
+    const fuselageLength = 3.4 * s * L;
+    const halfFuselage = fuselageLength / 2;
 
     const fuselage = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35 * s, 0.35 * s, 3.4 * s, 12),
+      new THREE.CylinderGeometry(fuselageRadius, fuselageRadius, fuselageLength, 12),
       brickMaterial(COLORS.aircraftBody, { roughness: 0.4 }),
     );
     fuselage.rotation.z = Math.PI / 2; // lie along X
@@ -104,12 +112,33 @@ export class Aircraft implements Selectable {
     group.add(fuselage);
 
     const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35 * s, 0.7 * s, 12),
+      new THREE.ConeGeometry(fuselageRadius, 0.75 * s, 12),
       brickMaterial(COLORS.aircraftBody, { roughness: 0.4 }),
     );
     nose.rotation.z = -Math.PI / 2;
-    nose.position.set(2.05 * s, 0.7 * s, 0);
+    nose.position.set(halfFuselage + fuselageRadius, 0.7 * s, 0);
     group.add(nose);
+
+    // Cabin window stripe along both sides of the fuselage — a single thin
+    // decal-like band per side rather than dozens of individual window
+    // meshes (spec §14's "각 창문을 무수히 많은 독립 Mesh로 만들지 않는다").
+    const windowStripeMat = brickMaterial(0x1c2b38, { roughness: 0.25, metalness: 0.1 });
+    for (const side of [-1, 1]) {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(fuselageLength * 0.62, 0.1 * s, 0.03 * s),
+        windowStripeMat,
+      );
+      stripe.position.set(-0.05 * s, 0.78 * s, side * fuselageRadius * 0.99);
+      group.add(stripe);
+    }
+
+    // Cockpit windshield — a small dark flat panel on the nose.
+    const windshield = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22 * s, 0.18 * s, fuselageRadius * 1.9),
+      brickMaterial(0x1c2b38, { roughness: 0.2, metalness: 0.15 }),
+    );
+    windshield.position.set(halfFuselage - 0.35 * s, 0.85 * s, 0);
+    group.add(windshield);
 
     const wingMat = brickMaterial(COLORS.aircraftWing, { roughness: 0.5 });
 
@@ -148,14 +177,14 @@ export class Aircraft implements Selectable {
       new THREE.BoxGeometry(0.7 * s, 0.1 * s, 1.9 * s),
       brickMaterial(COLORS.aircraftWing, { roughness: 0.5 }),
     );
-    tailplane.position.set(-1.5 * s, 0.9 * s, 0);
+    tailplane.position.set(-halfFuselage + 0.2 * s, 0.9 * s, 0);
     group.add(tailplane);
 
     const fin = new THREE.Mesh(
       new THREE.BoxGeometry(0.7 * s, 1.1 * s, 0.12 * s),
       brickMaterial(COLORS.aircraftTail, { roughness: 0.5 }),
     );
-    fin.position.set(-1.5 * s, 1.4 * s, 0);
+    fin.position.set(-halfFuselage + 0.2 * s, 1.4 * s, 0);
     fin.castShadow = true;
     group.add(fin);
 
@@ -163,7 +192,7 @@ export class Aircraft implements Selectable {
       new THREE.SphereGeometry(0.3 * s, 12, 8),
       brickMaterial(COLORS.aircraftCockpit, { roughness: 0.2, metalness: 0.1 }),
     );
-    cockpit.position.set(1.4 * s, 0.95 * s, 0);
+    cockpit.position.set(halfFuselage - 0.55 * s, 0.95 * s, 0);
     group.add(cockpit);
 
     // Engine pods under the wings, one fan disc per pod (spec §12/§13).
@@ -194,9 +223,9 @@ export class Aircraft implements Selectable {
     // for display; it never writes back to `data`.
     const gearMat = brickMaterial(0x22333b, { roughness: 0.6 });
     const gearPositions: [number, number, number][] = [
-      [0.9 * s, 0, 0],
-      [-0.6 * s, 0, 0.5 * s],
-      [-0.6 * s, 0, -0.5 * s],
+      [halfFuselage - 0.8 * s, 0, 0],
+      [-halfFuselage + 1.1 * s, 0, 0.5 * s],
+      [-halfFuselage + 1.1 * s, 0, -0.5 * s],
     ];
     for (const [gx, , gz] of gearPositions) {
       const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5 * s, 6), gearMat);
@@ -211,7 +240,7 @@ export class Aircraft implements Selectable {
     this.beaconMat = brickMaterial(0xe63946, { roughness: 0.3 }).clone();
     this.beaconMat.emissive.setHex(0xe63946);
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 8, 6), this.beaconMat);
-    beacon.position.set(-1.5 * s, 1.95 * s, 0);
+    beacon.position.set(-halfFuselage + 0.2 * s, 1.95 * s, 0);
     group.add(beacon);
   }
 

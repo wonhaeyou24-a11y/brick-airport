@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { Building } from "./Building";
 import { CELL_SIZE } from "../world/Grid";
 import { brickMaterial, COLORS } from "../world/materials";
-import { createStudRow, createWindowRow, createSignPost } from "../assets/AssetFactory";
+import { createStudRow, createWindowRow, createSignPost, createSignboard } from "../assets/AssetFactory";
 
 /**
  * Terminal — brick-toy airport terminal (V1.3-B upgrade of the V0.1
@@ -30,26 +30,54 @@ export class Terminal extends Building {
     body.receiveShadow = true;
     group.add(body);
 
-    // Glass frontage (facing -Z, toward the apron / gates / runway)
+    // Glass curtain wall (facing -Z, toward the apron / gates / runway) —
+    // now spans nearly the full height and width of the body, reading as a
+    // real curtain-wall frontage rather than a strip window (V2.0 STEP 1
+    // REWORK §6/§7's "Glass Curtain Wall").
     const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(w * 0.86, h * 0.6, 0.2),
+      new THREE.BoxGeometry(w * 0.92, h * 0.82, 0.2),
       brickMaterial(COLORS.terminalGlass, { roughness: 0.2, metalness: 0.1 }),
     );
-    glass.position.set(0, h * 0.42, -d / 2 - 0.02);
+    glass.position.set(0, h * 0.46, -d / 2 - 0.02);
     group.add(glass);
 
-    // Window mullions — a row of slightly darker panes over the glass, so the
-    // facade reads as individual windows instead of one glass slab (spec §9).
+    // Two floors of window mullions — a ground floor row plus an upper floor
+    // row divided by a dark spandrel band, so the facade reads as a
+    // multi-story building instead of one glass slab (spec §7/§9).
     const paneCount = Math.max(3, Math.round(w / 1.6));
-    const windows = createWindowRow(
+    const lowerWindows = createWindowRow(
       paneCount,
-      (w * 0.86) / paneCount,
-      (w * 0.7) / paneCount,
-      h * 0.42,
+      (w * 0.92) / paneCount,
+      (w * 0.78) / paneCount,
+      h * 0.36,
       0x6fb8d6,
     );
-    windows.position.set(0, h * 0.42, -d / 2 - 0.13);
-    group.add(windows);
+    lowerWindows.position.set(0, h * 0.24, -d / 2 - 0.13);
+    group.add(lowerWindows);
+
+    const spandrel = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.94, 0.16, 0.24),
+      brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.15 }),
+    );
+    spandrel.position.set(0, h * 0.46, -d / 2 - 0.05);
+    group.add(spandrel);
+
+    const upperWindows = createWindowRow(
+      paneCount,
+      (w * 0.92) / paneCount,
+      (w * 0.78) / paneCount,
+      h * 0.32,
+      0x6fb8d6,
+    );
+    upperWindows.position.set(0, h * 0.66, -d / 2 - 0.13);
+    group.add(upperWindows);
+
+    // "AIRPORT" signboard on the facade above the entrance — a single
+    // shared canvas-texture mesh (spec §36: no per-window mesh explosion),
+    // the clearest single cue that this is a terminal, not a generic block.
+    const signboard = createSignboard("AIRPORT", Math.min(w * 0.45, 4.5), 0.6);
+    signboard.position.set(0, h * 0.82, -d / 2 - 0.14);
+    group.add(signboard);
 
     // Flat roof cap
     const roof = new THREE.Mesh(

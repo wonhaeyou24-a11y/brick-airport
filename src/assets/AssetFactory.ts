@@ -232,21 +232,34 @@ export function createControlTower(): THREE.Group {
   strut.rotation.set(0.28, 0, -0.28);
   group.add(strut);
 
-  const cab = new THREE.Mesh(
-    cachedCylinder(1.2, 1.2, 1.5, 12),
-    brickMaterial(0x6fb8d6, { roughness: 0.25, metalness: 0.15 }),
+  // Structural core, slightly smaller than the glazed skin so the glass
+  // panels below actually read as windows on every side instead of a solid
+  // tinted cylinder (V2.0 STEP 1 REWORK §11 — "관제실은 일반 Box가 아니라
+  // 유리로 된 observation cabin처럼 보여야 한다").
+  const cabCore = new THREE.Mesh(
+    cachedCylinder(1.0, 1.0, 1.3, 12),
+    brickMaterial(0x274156, { roughness: 0.4, metalness: 0.1 }),
   );
-  cab.position.y = 8.75;
-  cab.castShadow = true;
-  group.add(cab);
+  cabCore.position.y = 8.75;
+  cabCore.castShadow = true;
+  group.add(cabCore);
 
-  // Glazing bands around the cab — 8 dark mullion strips reading as window
-  // seams (V2.0 §8's "Glass Windows"), cheaper than a full radial window row.
-  const mullionMat = brickMaterial(0x274156, { roughness: 0.4, metalness: 0.1 });
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const mullion = new THREE.Mesh(cachedBox(0.05, 1.5, 0.05), mullionMat);
-    mullion.position.set(Math.cos(angle) * 1.2, 8.75, Math.sin(angle) * 1.2);
+  // 8 outward-facing flat glass panels forming an octagonal glazed cabin —
+  // visible as actual windows from any camera angle, not just a color tint.
+  const glassMat = brickMaterial(0x8ed3f0, { roughness: 0.15, metalness: 0.1 });
+  const mullionMat = brickMaterial(0x1c2b38, { roughness: 0.4, metalness: 0.15 });
+  const panelCount = 8;
+  for (let i = 0; i < panelCount; i++) {
+    const angle = (i / panelCount) * Math.PI * 2;
+    const panel = new THREE.Mesh(cachedBox(0.78, 1.15, 0.06), glassMat);
+    panel.position.set(Math.cos(angle) * 1.18, 8.75, Math.sin(angle) * 1.18);
+    panel.rotation.y = -angle;
+    group.add(panel);
+
+    // Mullion post at each panel seam.
+    const seamAngle = angle + Math.PI / panelCount;
+    const mullion = new THREE.Mesh(cachedBox(0.07, 1.3, 0.07), mullionMat);
+    mullion.position.set(Math.cos(seamAngle) * 1.18, 8.75, Math.sin(seamAngle) * 1.18);
     group.add(mullion);
   }
 
@@ -278,7 +291,48 @@ export function createControlTower(): THREE.Group {
   return group;
 }
 
+const signTextureCache = new Map<string, THREE.CanvasTexture>();
+const signMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
+
+/**
+ * A lit signage panel with `text` baked into a small canvas texture —
+ * created once per distinct text and cached, so N terminals sharing a label
+ * cost one canvas render + one GPU upload total (V2.0 STEP 1 REWORK §8/§36:
+ * "가능하면 shared geometry/material을 사용한다", no per-frame or per-window
+ * mesh explosion). Uses MeshBasicMaterial so the sign still reads clearly at
+ * night-dark shadow angles, like real backlit airport signage.
+ */
+export function createSignboard(text: string, width: number, height: number): THREE.Mesh {
+  let texture = signTextureCache.get(text);
+  if (!texture) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#0b1f38";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 72px 'Segoe UI', Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4);
+    texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    signTextureCache.set(text, texture);
+  }
+  let material = signMaterialCache.get(text);
+  if (!material) {
+    material = new THREE.MeshBasicMaterial({ map: texture });
+    signMaterialCache.set(text, material);
+  }
+  return new THREE.Mesh(cachedBox(width, height, 0.06), material);
+}
+
 export function disposeAssetFactoryCache(): void {
   geoCache.forEach((g) => g.dispose());
   geoCache.clear();
+  signTextureCache.forEach((t) => t.dispose());
+  signTextureCache.clear();
+  signMaterialCache.forEach((m) => m.dispose());
+  signMaterialCache.clear();
 }
