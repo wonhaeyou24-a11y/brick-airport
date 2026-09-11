@@ -194,6 +194,19 @@ export function computeGroundEfficiency(input: GroundEfficiencyInput): number {
 }
 
 /**
+ * Player-facing label for a satisfaction score (V1.1-D). Pure display bucket
+ * over the same 0-100 scale every satisfaction number already uses — reuses
+ * the existing score, adds no new one.
+ */
+export function experienceLabel(satisfaction: number): string {
+  if (satisfaction >= 90) return "Very Happy";
+  if (satisfaction >= 75) return "Happy";
+  if (satisfaction >= 50) return "Normal";
+  if (satisfaction >= 30) return "Unhappy";
+  return "Very Unhappy";
+}
+
+/**
  * Deterministic pseudo-jitter in [-1, 1] from a string id — so a passenger's
  * satisfaction is stable across recomputes but varies between passengers.
  */
