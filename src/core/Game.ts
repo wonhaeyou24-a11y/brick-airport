@@ -45,12 +45,20 @@ import { OPERATIONS_CONFIG } from "../operations/OperationsConfig";
 import { AircraftManager } from "../aircraft/AircraftManager";
 import { FlightScheduler } from "../aircraft/FlightScheduler";
 import { GroundVehicleManager } from "../vehicles/GroundVehicleManager";
+import { StaffManager } from "../staff/StaffManager";
+import {
+  STAFF_CONFIG,
+  staffRoleConfig,
+  staffRoleLabel,
+} from "../staff/StaffConfig";
+import { jitterFromId } from "../operations/AirportOperations";
 import { PassengerManager } from "../passengers/PassengerManager";
 import { DEFAULT_WAYPOINTS } from "../passengers/waypoints";
 import { Economy } from "../economy/Economy";
 import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
+import type { StaffRole } from "./GameState";
 import { HUD, type SelectionInfo } from "../ui/HUD";
 import { BuildMenu, type BuildMenuItem } from "../ui/BuildMenu";
 
@@ -78,6 +86,7 @@ export class Game {
   private readonly aircraftManager: AircraftManager;
   private readonly flightScheduler: FlightScheduler;
   private readonly vehicleManager: GroundVehicleManager;
+  private readonly staffManager: StaffManager;
   private readonly passengerManager: PassengerManager;
   private readonly economy: Economy;
   private readonly operations: OperationsManager;
@@ -152,6 +161,9 @@ export class Game {
     this.vehicleManager = new GroundVehicleManager(this.state);
     this.scene.add(this.vehicleManager.group);
 
+    this.staffManager = new StaffManager(this.state);
+    this.scene.add(this.staffManager.group);
+
     this.operations = new OperationsManager(this.state);
 
     this.flightScheduler = new FlightScheduler(this.state, {
@@ -225,6 +237,7 @@ export class Game {
     this.cameraController.dispose();
     this.passengerManager.dispose();
     this.vehicleManager.dispose();
+    this.staffManager.dispose();
     this.aircraftManager.dispose();
     this.buildingPreview.dispose();
     this.gridCursor.dispose();
@@ -336,8 +349,55 @@ export class Game {
       ...this.world.selectables,
       ...this.aircraftManager.selectables,
       ...this.vehicleManager.selectables,
+      ...this.staffManager.selectables,
       ...this.passengerManager.selectables,
     ];
+  }
+
+  /**
+   * Hire another staff member of `role` (spec §B.3). Uses the shared
+   * spendMoney() economy API — no change to revenue handling (spec §10, §B.3).
+   * Exposed for the console / a future hire button; returns false if unaffordable.
+   */
+  hireStaff(role: StaffRole): boolean {
+    const cfg = staffRoleConfig(role);
+    if (!this.state.spendMoney(cfg.hiringCost)) {
+      this.hud.showNotice("Not enough money");
+      return false;
+    }
+    this.hud.showSpend(cfg.hiringCost);
+
+    const id = this.state.nextStaffId();
+    const seq = Number(/(\d+)$/.exec(id)?.[1] ?? 0);
+    const name = STAFF_CONFIG.names[seq % STAFF_CONFIG.names.length];
+    const home = {
+      x: 12 + (seq % 3) * 1.6,
+      y: 0,
+      z: 8 + (Math.floor(seq / 3) % 3) * 1.6,
+    };
+    const skill = Math.round(
+      Math.max(
+        40,
+        Math.min(95, cfg.skill + jitterFromId(id) * STAFF_CONFIG.skillJitter),
+      ),
+    );
+    this.state.addStaff({
+      id,
+      name,
+      role,
+      state: "IDLE",
+      position: { ...home },
+      targetPosition: null,
+      operationId: null,
+      skill,
+      hiredAt: Date.now(),
+      salary: cfg.salary,
+      homePosition: { ...home },
+      speed: STAFF_CONFIG.speed,
+    });
+    this.refreshHudStats();
+    this.hud.showNotice(`Hired ${name} · ${staffRoleLabel(role)}`);
+    return true;
   }
 
   /** A selected passenger was removed by PassengerManager — drop the selection. */
@@ -464,6 +524,26 @@ export class Game {
           lines.push(`Operation: ${opLabel(op.type)}`);
           lines.push(`Flight: ${flight ? flight.id : "—"}`);
           lines.push(`Aircraft: ${op.aircraftId}`);
+          lines.push(`Gate: ${gateName(op.gateId)}`);
+        } else {
+          lines.push("Operation: —");
+        }
+      }
+      return { title: s.getSelectionLabel(), lines };
+    }
+
+    if (s.selectionKind === "GROUND_STAFF") {
+      const st = this.state.getStaff(s.id);
+      const lines: string[] = [];
+      if (st) {
+        lines.push(`Role: ${staffRoleLabel(st.role)}`);
+        lines.push(`State: ${st.state}`);
+        lines.push(`Skill: ${st.skill}`);
+        const op = this.state.getGroundOperation(st.operationId);
+        if (op) {
+          const flight = this.state.getFlight(op.flightId);
+          lines.push(`Operation: ${opLabel(op.type)}`);
+          lines.push(`Flight: ${flight ? flight.id : "—"}`);
           lines.push(`Gate: ${gateName(op.gateId)}`);
         } else {
           lines.push("Operation: —");
@@ -635,6 +715,12 @@ export class Game {
         const op = this.state.getGroundOperation(v.operationId);
         sig = `${v.state}|${op?.id ?? "-"}:${op?.type ?? "-"}:${op?.state ?? "-"}`;
       }
+    } else if (sel.selectionKind === "GROUND_STAFF") {
+      const st = this.state.getStaff(sel.id);
+      if (st) {
+        const op = this.state.getGroundOperation(st.operationId);
+        sig = `${st.state}|${op?.id ?? "-"}:${op?.type ?? "-"}:${op?.state ?? "-"}`;
+      }
     } else {
       const building = this.state.getBuilding(sel.id);
       if (building?.type === "GATE") {
@@ -673,9 +759,10 @@ export class Game {
     this.passengerManager.update(deltaTime);
 
     // Ground operations: create + drive each parked aircraft's turnaround, then
-    // move the vehicles it dispatched this frame.
+    // move the staff + vehicles it dispatched this frame.
     const groundTick = this.groundOps.update(deltaTime);
     for (const notice of groundTick.notices) this.hud.showNotice(notice);
+    this.staffManager.update(deltaTime);
     this.vehicleManager.update(deltaTime);
 
     // Derive each gate's operational status from the aircraft + passengers.

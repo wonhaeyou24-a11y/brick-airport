@@ -53,6 +53,7 @@ export const COLORS = {
   vehicleService: 0x3a86c8,
   vehicleCab: 0x2b2d42,
   serviceRoad: 0x6b7079,
+  staffArea: 0x8a949c,
 } as const;
 
 export function disposePaletteCache(): void {
