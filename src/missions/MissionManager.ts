@@ -134,9 +134,11 @@ export class MissionManager {
       case "BUILD_TARGET":
         return this.state.data.buildings.length;
       case "OPERATION_TARGET":
-        return this.state.data.groundOperations.filter(
-          (o) => o.state === "COMPLETED",
-        ).length;
+        // V2.4 hardening — a lifetime counter, not a filter over
+        // data.groundOperations: that array is now pruned of old completed
+        // entries (GameState.pruneFinished) so it can't stand in for "how
+        // many ever" once it's had more than the retention cap completed.
+        return a.totalGroundOperationsCompleted ?? 0;
       case "STAFF_TARGET":
         return this.state.data.staff.length;
       case "FACILITY_TARGET":
@@ -152,16 +154,12 @@ export class MissionManager {
 
   private progressSignature(): string {
     const a = this.state.airport;
-    const completedOps = this.state.data.groundOperations.reduce(
-      (n, o) => (o.state === "COMPLETED" ? n + 1 : n),
-      0,
-    );
     return [
       a.totalFlights ?? 0,
       a.totalPassengers ?? 0,
       a.totalRevenue ?? 0,
       this.state.data.buildings.length,
-      completedOps,
+      a.totalGroundOperationsCompleted ?? 0,
       this.state.data.staff.length,
       Math.round(this.state.operations.passengerSatisfaction),
       a.level,

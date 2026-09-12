@@ -127,6 +127,16 @@ export class OperationalEventManager {
   update(deltaTime: number): OperationalEventTick {
     const notices: string[] = [];
 
+    // V2.4 hardening — resolve progress BEFORE aging/expiring: reading it in
+    // the other order meant a counter that reached an event's target on the
+    // exact same tick its duration also ran out could expire instead of
+    // resolve (and pay nothing), a rare but real ordering race.
+    const sig = this.progressSignature();
+    if (sig !== this.lastSig) {
+      this.lastSig = sig;
+      this.updateProgress(notices);
+    }
+
     this.ageActive(deltaTime, notices);
 
     this.cooldown -= deltaTime;
@@ -136,12 +146,6 @@ export class OperationalEventManager {
       if (started) {
         notices.push(`${EVENT_ICON[started.type]} ${started.title} — ${started.description}`);
       }
-    }
-
-    const sig = this.progressSignature();
-    if (sig !== this.lastSig) {
-      this.lastSig = sig;
-      this.updateProgress(notices);
     }
 
     return { notices };
@@ -244,10 +248,9 @@ export class OperationalEventManager {
         return a.totalFlights ?? 0;
       case "GROUND_DELAY":
       case "MAINTENANCE_REQUEST":
-        return this.state.data.groundOperations.reduce(
-          (n, o) => (o.state === "COMPLETED" ? n + 1 : n),
-          0,
-        );
+        // V2.4 hardening — lifetime counter, not a filter over
+        // data.groundOperations (now pruned of old completed entries).
+        return a.totalGroundOperationsCompleted ?? 0;
       case "STAFF_SHORTAGE":
         return this.state.data.staff.length;
     }
@@ -255,14 +258,10 @@ export class OperationalEventManager {
 
   private progressSignature(): string {
     const a = this.state.airport;
-    const completedOps = this.state.data.groundOperations.reduce(
-      (n, o) => (o.state === "COMPLETED" ? n + 1 : n),
-      0,
-    );
     return [
       a.totalPassengers ?? 0,
       a.totalFlights ?? 0,
-      completedOps,
+      a.totalGroundOperationsCompleted ?? 0,
       this.state.data.staff.length,
     ].join("|");
   }

@@ -384,6 +384,17 @@ export interface AirportData {
   operations?: OperationsData;
   /** Airport expansion tier (V1.2-D) — index into Expansion.EXPANSION_TIERS. Optional for pre-V1.2 states. */
   expansionLevel?: number;
+  /**
+   * Lifetime ground operations completed (V2.4 hardening). OPERATION_TARGET
+   * missions and the GROUND_DELAY/MAINTENANCE_REQUEST operational events used
+   * to derive this by filtering data.groundOperations for state===COMPLETED —
+   * which silently depended on that array never being pruned. Now that
+   * finished ground operations ARE pruned (GameState.pruneFinished, so a long
+   * session's save doesn't grow forever), those consumers need a real
+   * cumulative counter instead, the same pattern totalFlights already uses.
+   * Optional for states saved before this field existed (read via `?? 0`).
+   */
+  totalGroundOperationsCompleted?: number;
 }
 
 export interface BuildingData {
@@ -762,10 +773,24 @@ export class GameState {
 
   constructor(data: GameStateData = createInitialState()) {
     this.data = data;
+    // V2.4 hardening: a corrupted/malformed save (hand-edited localStorage,
+    // a future save-writer bug, browser storage corruption) could arrive with
+    // buildings/gates/aircraft missing or not actually arrays. Nothing below
+    // checked these three before iterating them, so a save missing e.g.
+    // `buildings` crashed the ENTIRE app at startup with no recovery path —
+    // confirmed via a manual malformed-save test (Uncaught TypeError:
+    // "state.data.buildings is not iterable", blank screen, unrecoverable
+    // short of clearing localStorage by hand). Every other array below had
+    // this same latent gap (a falsy check misses a non-array truthy value
+    // like `{}`), so all of them now use the same Array.isArray guard, in
+    // this fixed order and before any loop below touches them.
+    if (!Array.isArray(this.data.buildings)) this.data.buildings = [];
+    if (!Array.isArray(this.data.gates)) this.data.gates = [];
+    if (!Array.isArray(this.data.aircraft)) this.data.aircraft = [];
     // Forward-compat: a state saved before V0.3 has no passengers array.
-    if (!this.data.passengers) this.data.passengers = [];
+    if (!Array.isArray(this.data.passengers)) this.data.passengers = [];
     // Forward-compat: a state saved before V0.6 has no flights array.
-    if (!this.data.flights) this.data.flights = [];
+    if (!Array.isArray(this.data.flights)) this.data.flights = [];
     // Forward-compat: pre-V0.4 passengers have no revenueProcessed flag.
     // Assume an already-BOARDED one was paid so it is never double-credited.
     for (const p of this.data.passengers) {
@@ -775,7 +800,23 @@ export class GameState {
     }
     // Forward-compat (pre-V0.4.2): OCCUPIED is not an operational status.
     // GateStatusSync recomputes every gate each frame; seed a sane value here.
+    //
+    // V2.4 hardening: also repair a gate whose aircraftId points at an
+    // aircraft that doesn't exist (a corrupted/hand-edited save, or a future
+    // save-writer bug) — confirmed via testing that this specific
+    // inconsistency has no other repair path anywhere and permanently
+    // softlocks the airport: findAvailableGate() requires BOTH
+    // status === "AVAILABLE" AND aircraftId === null, so a gate stuck with a
+    // dangling aircraftId can never be dispatched to again, and if it's the
+    // only gate, NO flight ever departs again — a silent, permanent stall
+    // with no crash and no error, the "impossible gate ownership" case.
+    const aircraftIds = new Set(this.data.aircraft.map((a) => a.id));
     for (const g of this.data.gates) {
+      if (g.aircraftId !== null && !aircraftIds.has(g.aircraftId)) {
+        g.aircraftId = null;
+        g.status = "AVAILABLE";
+        continue;
+      }
       if (g.status === "OCCUPIED") {
         g.status = g.aircraftId ? "BOARDING" : "AVAILABLE";
       }
@@ -788,27 +829,107 @@ export class GameState {
       this.data.airport.operations.groundEfficiency =
         DEFAULT_OPERATIONS.groundEfficiency;
     }
-    if (typeof this.data.airport.reputation !== "number") {
+    if (typeof this.data.airport.reputation !== "number" || !isFinite(this.data.airport.reputation)) {
       this.data.airport.reputation = 0;
     }
+    // V2.4 hardening: money/level driving every economy and unlock check —
+    // a corrupted save (e.g. money as a string) would slip past the `?? 0`
+    // pattern used for the optional lifetime counters elsewhere (that only
+    // catches null/undefined, not a wrong-typed value) and propagate NaN or
+    // do string-coercion comparisons everywhere money is checked or spent.
+    if (typeof this.data.airport.money !== "number" || !isFinite(this.data.airport.money)) {
+      this.data.airport.money = ECONOMY_CONFIG.startingMoney;
+    }
+    if (
+      typeof this.data.airport.level !== "number" ||
+      !isFinite(this.data.airport.level) ||
+      this.data.airport.level < 1
+    ) {
+      this.data.airport.level = 1;
+    }
     // Forward-compat: a state saved before V0.8 has no ground operations / fleet.
-    if (!this.data.groundOperations) this.data.groundOperations = [];
-    if (!this.data.groundVehicles || this.data.groundVehicles.length === 0) {
+    if (!Array.isArray(this.data.groundOperations)) this.data.groundOperations = [];
+    if (!Array.isArray(this.data.groundVehicles) || this.data.groundVehicles.length === 0) {
       this.data.groundVehicles = defaultGroundVehicles();
     }
     // Forward-compat: a state saved before V0.9 has no staff.
-    if (!this.data.staff || this.data.staff.length === 0) {
+    if (!Array.isArray(this.data.staff) || this.data.staff.length === 0) {
       this.data.staff = defaultStaff();
     }
     // Forward-compat: a state saved before V1.0 has no missions / events.
-    if (!this.data.missions) this.data.missions = [];
-    if (!this.data.operationalEvents) this.data.operationalEvents = [];
+    if (!Array.isArray(this.data.missions)) this.data.missions = [];
+    if (!Array.isArray(this.data.operationalEvents)) this.data.operationalEvents = [];
     // Forward-compat: a state saved before V1.2 has no expansion level.
     if (typeof this.data.airport.expansionLevel !== "number") {
       this.data.airport.expansionLevel = 0;
     }
+    // V2.4 hardening: a state saved before totalGroundOperationsCompleted
+    // existed backfills it from the still-unpruned array below, so
+    // OPERATION_TARGET missions / GROUND_DELAY events keep their real
+    // historical progress instead of silently resetting to 0.
+    if (typeof this.data.airport.totalGroundOperationsCompleted !== "number") {
+      this.data.airport.totalGroundOperationsCompleted = this.data.groundOperations.filter(
+        (o) => o.state === "COMPLETED",
+      ).length;
+    }
     // All migrations have run — the state now matches the current schema.
     this.data.version = STATE_VERSION;
+
+    // V2.4 hardening — flights / groundOperations / operationalEvents used to
+    // grow by one (or four) entries per turnaround forever, for the life of a
+    // save: nothing ever removed a finished one, only the counters
+    // (totalFlights etc.) and a "last 5/6" display slice ever needed them.
+    // Over a long-lived save this bloated localStorage and made every
+    // getGroundOperationsForFlight()/history-panel scan slower over time. A
+    // save from before this fix is trimmed once here, same as the other
+    // forward-compat steps above.
+    this.pruneFinished(this.data.flights, (f) => isFlightOver(f.state), GameState.COMPLETED_FLIGHT_CAP);
+    this.pruneFinished(
+      this.data.groundOperations,
+      (o) => isGroundOperationOver(o.state),
+      GameState.COMPLETED_GROUND_OP_CAP,
+    );
+    this.pruneFinished(
+      this.data.operationalEvents,
+      (e) => e.state !== "ACTIVE",
+      GameState.FINISHED_EVENT_CAP,
+    );
+  }
+
+  /** V2.4 hardening — retention caps for finished-entity history arrays. Well
+   * above what any panel displays (Recent Flights: 5, Ground Ops activity: 6,
+   * operational events: only the single ACTIVE one), just enough headroom
+   * that trimming never touches something still relevant this frame. */
+  private static readonly COMPLETED_FLIGHT_CAP = 30;
+  private static readonly COMPLETED_GROUND_OP_CAP = 60;
+  private static readonly FINISHED_EVENT_CAP = 5;
+
+  /**
+   * Drop the OLDEST finished (per `isFinished`) entries of `arr` in place once
+   * more than `cap` of them exist. Entries are pushed in creation order and
+   * never reordered, so the oldest finished ones are simply the first matches
+   * found scanning from the front — the highest-numbered id (whatever
+   * `nextXId()` will resume from) is always one of the most recent finished
+   * entries and is therefore never among those dropped, so this never causes
+   * id reuse/collision.
+   */
+  private pruneFinished<T>(
+    arr: T[],
+    isFinished: (x: T) => boolean,
+    cap: number,
+  ): void {
+    let finished = 0;
+    for (const x of arr) if (isFinished(x)) finished += 1;
+    let excess = finished - cap;
+    if (excess <= 0) return;
+    for (let i = 0; i < arr.length && excess > 0; ) {
+      if (isFinished(arr[i])) {
+        arr.splice(i, 1);
+        excess -= 1;
+      } else {
+        i += 1;
+      }
+    }
   }
 
   get airport(): AirportData {
@@ -1090,6 +1211,7 @@ export class GameState {
       const ac = this.getAircraft(flight.aircraftId);
       if (ac && ac.currentFlightId === id) ac.currentFlightId = null;
     }
+    this.pruneFinished(this.data.flights, (f) => isFlightOver(f.state), GameState.COMPLETED_FLIGHT_CAP);
   }
 
   // ------------------------------------------------------ ground operations
@@ -1132,6 +1254,16 @@ export class GameState {
     op.completedAt = Date.now();
     op.vehicleId = null;
     op.staffId = null;
+    // V2.4 hardening — a real lifetime counter (mirrors totalFlights), so
+    // OPERATION_TARGET missions / GROUND_DELAY events don't depend on
+    // data.groundOperations staying unpruned forever (see pruneFinished below).
+    this.data.airport.totalGroundOperationsCompleted =
+      (this.data.airport.totalGroundOperationsCompleted ?? 0) + 1;
+    this.pruneFinished(
+      this.data.groundOperations,
+      (o) => isGroundOperationOver(o.state),
+      GameState.COMPLETED_GROUND_OP_CAP,
+    );
   }
 
   /**
@@ -1273,6 +1405,11 @@ export class GameState {
 
   addOperationalEvent(event: OperationalEventData): void {
     this.data.operationalEvents.push(event);
+    this.pruneFinished(
+      this.data.operationalEvents,
+      (e) => e.state !== "ACTIVE",
+      GameState.FINISHED_EVENT_CAP,
+    );
   }
 
   getOperationalEvent(id: string | null | undefined): OperationalEventData | undefined {
