@@ -34,6 +34,46 @@ export class GroundVehicleManager {
     this.group = new THREE.Group();
     this.group.name = "ground-vehicles";
     for (const data of state.data.groundVehicles) this.addMesh(data);
+    this.resumeInterruptedMovement();
+  }
+
+  /**
+   * V2.4 hardening — same issue as StaffManager: `paths` is runtime-only. A
+   * vehicle saved mid-drive (MOVING or RETURNING) has no path to resume after
+   * a reload — it drives to the single waypoint remembered in
+   * `targetPosition`, then freezes there forever, never reaching WORKING or
+   * IDLE (confirmed live: a BAGGAGE_CART stuck in RETURNING, never returning
+   * to IDLE, so idleGroundVehicle() could never find it again — blocking
+   * every BAGGAGE operation project-wide). Rebuild a fresh path from its
+   * current position, same waypoint style `redirect()` already uses.
+   */
+  private resumeInterruptedMovement(): void {
+    for (const data of this.state.data.groundVehicles) {
+      if (data.state === "MOVING") {
+        const op = data.operationId
+          ? this.state.getGroundOperation(data.operationId)
+          : undefined;
+        const gate = op ? this.state.getGate(op.gateId) : undefined;
+        if (gate) {
+          this.startPath(data, [
+            serviceLanePoint(data.position.x),
+            serviceLanePoint(gate.parkPosition.x),
+            workPosition(gate.parkPosition),
+          ]);
+          continue;
+        }
+        // No resolvable operation/gate left — nothing to drive to; go home.
+        data.operationId = null;
+        data.state = "RETURNING";
+      }
+      if (data.state === "RETURNING") {
+        this.startPath(data, [
+          serviceLanePoint(data.position.x),
+          serviceLanePoint(data.homePosition.x),
+          { ...data.homePosition },
+        ]);
+      }
+    }
   }
 
   /** Selectable vehicles, for the SelectionManager. */

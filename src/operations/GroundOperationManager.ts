@@ -82,6 +82,34 @@ export class GroundOperationManager {
     private readonly staff: StaffManager,
   ) {
     this.recomputeEfficiency();
+    this.resumeTurnarounds();
+  }
+
+  /**
+   * V2.4 hardening — `turnaroundStarted` is runtime-only, never persisted.
+   * `ensureTurnarounds()` only ever consulted this Set, so after every
+   * reload it started empty and treated every already-in-progress flight as
+   * brand new — creating ANOTHER full 4-task turnaround for it, on top of
+   * whatever ops that flight already had (confirmed live: the same 3 flights
+   * on the deployed site had SEVEN duplicate BAGGAGE/CLEANING/REFUELING/
+   * BOARDING_SERVICE sets stacked up, one extra per reload, all but the
+   * first sitting PENDING forever since nextPendingOperation() only ever
+   * works the oldest one). Seed the Set from the persisted ground operations
+   * instead, the same way StaffManager/GroundVehicleManager already rebuild
+   * their own runtime state from GameState in their constructors.
+   */
+  private resumeTurnarounds(): void {
+    for (const op of this.state.data.groundOperations) {
+      const flight = this.state.getFlight(op.flightId);
+      if (!flight || isFlightOver(flight.state)) continue;
+      this.turnaroundStarted.add(op.flightId);
+    }
+    for (const flightId of this.turnaroundStarted) {
+      const ops = this.state.getGroundOperationsForFlight(flightId);
+      if (ops.length > 0 && ops.every((o) => o.state === "COMPLETED")) {
+        this.readyAnnounced.add(flightId);
+      }
+    }
   }
 
   update(deltaTime: number): GroundOperationsTick {

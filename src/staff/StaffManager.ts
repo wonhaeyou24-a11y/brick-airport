@@ -29,6 +29,48 @@ export class StaffManager {
     this.group = new THREE.Group();
     this.group.name = "staff";
     for (const data of state.data.staff) this.addMesh(data);
+    this.resumeInterruptedMovement();
+  }
+
+  /**
+   * V2.4 hardening — `paths` (the actual remaining waypoints) is runtime-only,
+   * never persisted, unlike `state`/`targetPosition` on StaffData. A staff
+   * member saved mid-walk (MOVING) has no path to resume after a reload: they
+   * keep walking to the one waypoint remembered in `targetPosition`, then
+   * `advancePath()` finds nothing in the (freshly empty) `paths` map and
+   * leaves them frozen there forever — `state` stuck at MOVING, never
+   * reaching WORKING or IDLE again, permanently holding their operation's
+   * `staffId` (confirmed live on the deployed site: a staff member frozen at
+   * `targetPosition: null` while still MOVING, its ground operation stuck
+   * PENDING forever since a non-IDLE staff member is never reassigned).
+   * Rebuild a fresh path from wherever they actually are now, using the same
+   * waypoint style `redirect()` already uses for a live mid-route retarget.
+   */
+  private resumeInterruptedMovement(): void {
+    for (const data of this.state.data.staff) {
+      if (data.state !== "MOVING") continue;
+      const op = data.operationId
+        ? this.state.getGroundOperation(data.operationId)
+        : undefined;
+      const gate = op ? this.state.getGate(op.gateId) : undefined;
+      if (gate) {
+        this.startPath(data, [
+          staffLanePoint(data.position.x),
+          staffLanePoint(gate.parkPosition.x + 1.5),
+          staffWorkPosition(gate.parkPosition),
+        ]);
+      } else {
+        // No resolvable operation/gate (it finished or was cleaned up while
+        // this staff member was in transit, or they were already on their
+        // way home) — send them home instead of leaving them stranded.
+        data.operationId = null;
+        this.startPath(data, [
+          staffLanePoint(data.position.x),
+          staffLanePoint(data.homePosition.x),
+          { ...data.homePosition },
+        ]);
+      }
+    }
   }
 
   /** Selectable staff, for the SelectionManager. */
