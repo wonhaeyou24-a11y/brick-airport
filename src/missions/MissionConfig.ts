@@ -38,6 +38,10 @@ export const MISSION_POOL: readonly MissionTemplate[] = [
   { type: "SATISFACTION_TARGET", target: 75, title: "Happy Travelers", rewardMoney: 900, rewardReputation: 4 },
   { type: "FACILITY_TARGET", target: 4, title: "Airport Services", rewardMoney: 1500, rewardReputation: 6 },
   { type: "SATISFACTION_TARGET", target: 85, title: "Five-Star Airport", rewardMoney: 2000, rewardReputation: 7 },
+  // V2.1 content expansion — ties a mission directly to the new Lv.4/Lv.5
+  // progression tiers (AirportProgression.LEVEL_REQUIREMENTS).
+  { type: "LEVEL_TARGET", target: 4, title: "International Gateway", rewardMoney: 2000, rewardReputation: 6 },
+  { type: "LEVEL_TARGET", target: 5, title: "Hub Airport", rewardMoney: 3000, rewardReputation: 9 },
 ];
 
 /** Max ACTIVE missions at once (spec §B.2). */
@@ -67,6 +71,8 @@ export function missionDescription(
         return `서비스 시설 ${target}개 건설`;
       case "SATISFACTION_TARGET":
         return `평균 승객 만족도 ${target} 달성`;
+      case "LEVEL_TARGET":
+        return `공항 레벨 ${target} 달성`;
     }
   }
   switch (type) {
@@ -86,5 +92,7 @@ export function missionDescription(
       return `Build ${target} service facilities`;
     case "SATISFACTION_TARGET":
       return `Reach ${target} average passenger satisfaction`;
+    case "LEVEL_TARGET":
+      return `Reach airport level ${target}`;
   }
 }

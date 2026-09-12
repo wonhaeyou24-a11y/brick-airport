@@ -48,7 +48,11 @@ export type ServiceFacilityType =
   // Amenities (V1.1-A) — comfort/service facilities, same build pipeline.
   | "SHOP"
   | "FOOD"
-  | "RESTROOM";
+  | "RESTROOM"
+  // V2.1 content expansion — unlocked at the new Lv.4/Lv.5 progression tiers,
+  // same build pipeline as every other service facility (spec §4/§13).
+  | "PARKING"
+  | "VIP_LOUNGE";
 
 export type BuildingType =
   | "TERMINAL"
@@ -64,6 +68,8 @@ export const SERVICE_FACILITY_TYPES: readonly ServiceFacilityType[] = [
   "SHOP",
   "FOOD",
   "RESTROOM",
+  "PARKING",
+  "VIP_LOUNGE",
 ];
 
 const SERVICE_FACILITY_SET: ReadonlySet<string> = new Set(SERVICE_FACILITY_TYPES);
@@ -263,7 +269,10 @@ export type MissionType =
   // V1.1-D: facility / passenger-experience objectives, same absolute-target
   // shape as every other mission — no new MissionData fields.
   | "FACILITY_TARGET"
-  | "SATISFACTION_TARGET";
+  | "SATISFACTION_TARGET"
+  // V2.1: airport-tier objective, reads the same `airport.level` the top bar
+  // and BuildMenu already gate on — no new counter, no new MissionData shape.
+  | "LEVEL_TARGET";
 
 export type MissionState =
   | "AVAILABLE"
@@ -870,6 +879,8 @@ export class GameState {
       SHOP: 0,
       FOOD: 0,
       RESTROOM: 0,
+      PARKING: 0,
+      VIP_LOUNGE: 0,
     };
     for (const b of this.data.buildings) {
       if (isServiceFacility(b.type)) counts[b.type] += 1;

@@ -1,5 +1,6 @@
 import type { GameState } from "../core/GameState";
 import { ECONOMY_CONFIG } from "./EconomyConfig";
+import { getDestination } from "../aircraft/FlightConfig";
 
 /**
  * Economy — the airport's money ledger.
@@ -35,6 +36,7 @@ export class Economy {
    */
   settleBoarding(): number {
     let newlyBoarded = 0;
+    let revenue = 0;
     for (const p of this.state.data.passengers) {
       if (
         p.routeType === "DEPARTURE" &&
@@ -43,11 +45,21 @@ export class Economy {
       ) {
         p.revenueProcessed = true;
         newlyBoarded += 1;
+        // V2.1 content expansion — route distance now actually matters
+        // economically: a long-haul destination's revenueMultiplier (a field
+        // that existed since V0.7 but was never applied) scales this
+        // passenger's ticket revenue. Falls back to the flat rate (x1) for a
+        // passenger whose flight/destination can't be resolved, so nothing
+        // regresses if data is ever missing.
+        const flight = this.state.getFlight(p.flightId);
+        const multiplier = flight ? (getDestination(flight.destination)?.revenueMultiplier ?? 1) : 1;
+        // Rounded per-passenger (not just at the end) so money stays a clean
+        // whole-won integer regardless of floating-point multiplication.
+        revenue += Math.round(ECONOMY_CONFIG.ticketRevenuePerPassenger * multiplier);
       }
     }
     if (newlyBoarded === 0) return 0;
 
-    const revenue = newlyBoarded * ECONOMY_CONFIG.ticketRevenuePerPassenger;
     this.addRevenue(revenue, newlyBoarded);
     return revenue;
   }

@@ -20,6 +20,9 @@ const BODY_COLOR: Record<ServiceFacilityType, number> = {
   SHOP: COLORS.facilityShop,
   FOOD: COLORS.facilityFood,
   RESTROOM: COLORS.facilityRestroom,
+  // V2.1 content expansion.
+  PARKING: COLORS.facilityParking,
+  VIP_LOUNGE: COLORS.facilityVipLounge,
 };
 
 const BODY_HEIGHT: Record<ServiceFacilityType, number> = {
@@ -30,6 +33,9 @@ const BODY_HEIGHT: Record<ServiceFacilityType, number> = {
   SHOP: 2.0,
   FOOD: 2.0,
   RESTROOM: 1.6,
+  // Low flat structure for a parking facility; a grander premium lounge.
+  PARKING: 1.2,
+  VIP_LOUNGE: 3.2,
 };
 
 export class ServiceFacility extends Building {

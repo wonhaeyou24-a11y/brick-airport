@@ -47,6 +47,9 @@ export const COLORS = {
   facilityShop: 0x8ecae6,
   facilityFood: 0xffb703,
   facilityRestroom: 0x52b788,
+  // V2.1 content expansion — Lv.4/Lv.5 facilities.
+  facilityParking: 0x7a828c,
+  facilityVipLounge: 0xb8860b,
   facilityRoof: 0xf4f4f4,
   aircraftBody: 0xffffff,
   aircraftWing: 0xd7dde2,

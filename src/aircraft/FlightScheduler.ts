@@ -220,7 +220,11 @@ export class FlightScheduler {
         const paid = this.state
           .getPassengersForAircraft(ac.id, "DEPARTURE")
           .filter((p) => p.revenueProcessed).length;
-        const revenue = paid * ECONOMY_CONFIG.ticketRevenuePerPassenger;
+        // V2.1: mirror Economy.settleBoarding()'s per-passenger multiplier so
+        // this display/history figure matches the money actually credited,
+        // instead of quietly reverting to the flat rate for every route.
+        const multiplier = getDestination(flight.destination)?.revenueMultiplier ?? 1;
+        const revenue = paid * Math.round(ECONOMY_CONFIG.ticketRevenuePerPassenger * multiplier);
         if (revenue > (flight.revenue ?? 0)) flight.revenue = revenue;
       }
 

@@ -39,6 +39,9 @@ export const FACILITY_EFFECTS: Partial<Record<BuildingType, FacilityEffect>> = {
   SHOP: { comfort: C.SHOP, service: S.SHOP },
   FOOD: { comfort: C.FOOD, service: S.FOOD },
   RESTROOM: { comfort: C.RESTROOM, service: S.RESTROOM },
+  // V2.1 content expansion.
+  PARKING: { comfort: C.PARKING, service: S.PARKING },
+  VIP_LOUNGE: { passengerCapacity: 8, comfort: C.VIP_LOUNGE, service: S.VIP_LOUNGE },
 };
 
 export function getFacilityEffect(type: BuildingType): FacilityEffect {

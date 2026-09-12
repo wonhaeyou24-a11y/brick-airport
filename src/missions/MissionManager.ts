@@ -145,6 +145,8 @@ export class MissionManager {
         ).length;
       case "SATISFACTION_TARGET":
         return this.state.operations.passengerSatisfaction;
+      case "LEVEL_TARGET":
+        return a.level;
     }
   }
 
@@ -162,6 +164,7 @@ export class MissionManager {
       completedOps,
       this.state.data.staff.length,
       Math.round(this.state.operations.passengerSatisfaction),
+      a.level,
     ].join("|");
   }
 }

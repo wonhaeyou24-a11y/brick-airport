@@ -27,6 +27,9 @@ export const OPERATIONS_CONFIG = {
     SHOP: 4,
     FOOD: 5,
     RESTROOM: 3,
+    // V2.1 content expansion — Lv.4/Lv.5 facilities.
+    PARKING: 6,
+    VIP_LOUNGE: 6,
   } as Record<string, number>,
 
   // ------------------------------------------------- passenger satisfaction ---
@@ -46,6 +49,10 @@ export const OPERATIONS_CONFIG = {
     SHOP: 3,
     FOOD: 5,
     RESTROOM: 4,
+    // V2.1 content expansion — VIP_LOUNGE is the premium hub-tier facility,
+    // deliberately above LOUNGE's 10 (spec §3/§4's "국제/허브 공항" tiers).
+    PARKING: 2,
+    VIP_LOUNGE: 14,
   } as Record<string, number>,
   /** Each further same-kind facility adds this fraction of the previous one. */
   facilityStackFalloff: 0.5,

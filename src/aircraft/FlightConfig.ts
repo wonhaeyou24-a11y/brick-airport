@@ -55,11 +55,20 @@ export interface DestinationConfig {
 // boarding + departure), so these leave headroom for a busy airport while a
 // FLIGHT_DELAY (+OPERATIONS_CONFIG.flightDelaySeconds) reliably pushes a flight
 // over budget.
+// V2.1 content expansion — revenueMultiplier is now actually applied
+// (Economy.settleBoarding(), previously a reserved no-op field per this
+// file's own old comment), so route choice has a real economic difference:
+// short domestic hops pay less per ticket, long-haul international routes
+// pay more. Two new destinations gated at the new Lv.4/Lv.5 tiers
+// (AirportProgression.LEVEL_REQUIREMENTS) give those levels a concrete
+// reason to reach, alongside the new facilities in BuildingConfig.
 export const DESTINATIONS: readonly DestinationConfig[] = [
+  { id: "BUSAN", name: "Busan", requiredLevel: 1, demand: 1, flightDuration: 58, revenueMultiplier: 0.8 },
   { id: "TOKYO", name: "Tokyo", requiredLevel: 1, demand: 1, flightDuration: 62, revenueMultiplier: 1 },
-  { id: "BUSAN", name: "Busan", requiredLevel: 1, demand: 1, flightDuration: 58, revenueMultiplier: 1 },
-  { id: "BANGKOK", name: "Bangkok", requiredLevel: 2, demand: 1, flightDuration: 70, revenueMultiplier: 1 },
-  { id: "PARIS", name: "Paris", requiredLevel: 3, demand: 1, flightDuration: 80, revenueMultiplier: 1 },
+  { id: "BANGKOK", name: "Bangkok", requiredLevel: 2, demand: 1, flightDuration: 70, revenueMultiplier: 1.3 },
+  { id: "PARIS", name: "Paris", requiredLevel: 3, demand: 1, flightDuration: 80, revenueMultiplier: 1.8 },
+  { id: "NEW_YORK", name: "New York", requiredLevel: 4, demand: 1, flightDuration: 92, revenueMultiplier: 2.2 },
+  { id: "DUBAI", name: "Dubai", requiredLevel: 5, demand: 1, flightDuration: 100, revenueMultiplier: 2.6 },
 ];
 
 /** Destinations unlocked at `level` (never empty — falls back to the first). */

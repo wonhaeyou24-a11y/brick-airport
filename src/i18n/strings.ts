@@ -191,6 +191,9 @@ const CITY_KO: Record<string, string> = {
   BUSAN: "부산",
   BANGKOK: "방콕",
   PARIS: "파리",
+  // V2.1 content expansion — Lv.4/Lv.5 long-haul destinations.
+  NEW_YORK: "뉴욕",
+  DUBAI: "두바이",
 };
 
 export function cityLabel(id: string, locale: Locale = CURRENT_LOCALE): string {

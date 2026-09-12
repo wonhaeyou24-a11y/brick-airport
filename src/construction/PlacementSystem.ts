@@ -46,6 +46,9 @@ export const BUILDING_FOOTPRINTS: Record<BuildingType, CellSize> = {
   FOOD: { cols: 2, rows: 2 },
   RESTROOM: { cols: 2, rows: 2 },
   SHOP: { cols: 2, rows: 2 },
+  // V2.1 content expansion — same small pad as every other service facility.
+  PARKING: { cols: 2, rows: 2 },
+  VIP_LOUNGE: { cols: 2, rows: 2 },
 };
 
 export class PlacementSystem {

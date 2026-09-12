@@ -39,7 +39,11 @@ import {
   checkPurchase,
   type PurchaseResult,
 } from "../buildings/BuildingConfig";
-import { computeAirportLevel, LEVEL_REQUIREMENTS } from "../progression/AirportProgression";
+import {
+  computeAirportLevel,
+  LEVEL_REQUIREMENTS,
+  AIRPORT_TIER_NAME_KO,
+} from "../progression/AirportProgression";
 import {
   EXPANSION_TIERS,
   MAX_EXPANSION_LEVEL,
@@ -1608,7 +1612,12 @@ export class Game {
       (tier) => tier.requiredLevel > fromLevel && tier.requiredLevel <= toLevel && tier.level > 0,
     );
 
-    const lines = [`🎉 공항 레벨 업! Lv.${toLevel}`];
+    const tierName = AIRPORT_TIER_NAME_KO[toLevel];
+    const lines = [
+      tierName
+        ? `🎉 공항 레벨 업! Lv.${toLevel} - ${tierName} 달성!`
+        : `🎉 공항 레벨 업! Lv.${toLevel}`,
+    ];
     if (unlockedBuildings.length > 0) {
       lines.push(`새로운 건설: ${unlockedBuildings.join(", ")}`);
     }

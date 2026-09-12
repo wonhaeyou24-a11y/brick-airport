@@ -36,6 +36,11 @@ export const BUILDING_CONFIG: Record<BuildingType, BuildingConfig> = {
   FOOD: { cost: 2500, requiredLevel: 2, label: "Food Court" },
   RESTROOM: { cost: 1500, requiredLevel: 2, label: "Restroom" },
   SHOP: { cost: 3500, requiredLevel: 3, label: "Shop" },
+  // V2.1 content expansion — unlocked at the new Lv.4/Lv.5 tiers
+  // (AirportProgression.LEVEL_REQUIREMENTS), giving those levels a real
+  // reason to reach (spec §3/§4/§13).
+  PARKING: { cost: 4500, requiredLevel: 4, label: "Parking" },
+  VIP_LOUNGE: { cost: 6000, requiredLevel: 5, label: "VIP Lounge" },
 };
 
 /** Placeable building types, in BuildMenu display order. */
@@ -50,6 +55,8 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   "FOOD",
   "RESTROOM",
   "SHOP",
+  "PARKING",
+  "VIP_LOUNGE",
 ];
 
 export function getBuildingConfig(type: BuildingType): BuildingConfig {
@@ -68,6 +75,8 @@ const BUILDING_LABEL_KO: Record<BuildingType, string> = {
   FOOD: "푸드코트",
   RESTROOM: "화장실",
   SHOP: "상점",
+  PARKING: "주차장",
+  VIP_LOUNGE: "VIP 라운지",
 };
 
 /** Locale-aware building name for the BuildMenu / selection HUD. */
