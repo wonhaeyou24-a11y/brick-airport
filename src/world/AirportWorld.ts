@@ -120,6 +120,7 @@ export class AirportWorld {
   update(deltaTime: number): void {
     for (const b of this.buildings) {
       if (b instanceof Gate) b.tickAnimation(deltaTime);
+      else if (b instanceof Terminal) b.tickAnimation(deltaTime);
     }
 
     for (let i = this.poppingIn.length - 1; i >= 0; i--) {

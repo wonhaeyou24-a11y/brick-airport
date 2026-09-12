@@ -62,6 +62,130 @@ export function createStudRow(
   return group;
 }
 
+const studDummy = new THREE.Object3D();
+
+/**
+ * A rectangular GRID of roofline studs as ONE InstancedMesh (V3.0 PHASE 1
+ * absolute rule §4 — a roof-plate stud grid is exactly the "반복되는 블록
+ * 돌기" case: a dense terminal roof can carry 50-150+ studs, and each one as
+ * its own Mesh/draw-call would be the "drawcall 폭증" the rule exists to
+ * prevent. One geometry + one material + one draw call, however many studs.
+ */
+export function createStudGrid(
+  cols: number,
+  rows: number,
+  spacingX: number,
+  spacingZ: number,
+  color: number,
+  radius = 0.09,
+): THREE.InstancedMesh {
+  const count = Math.max(1, cols) * Math.max(1, rows);
+  const mesh = new THREE.InstancedMesh(
+    cachedCylinder(radius, radius, radius * 0.7, 10),
+    brickMaterial(color, { roughness: 0.55 }),
+    count,
+  );
+  mesh.castShadow = true;
+  const startX = -((cols - 1) * spacingX) / 2;
+  const startZ = -((rows - 1) * spacingZ) / 2;
+  let i = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      studDummy.position.set(startX + c * spacingX, 0, startZ + r * spacingZ);
+      studDummy.updateMatrix();
+      mesh.setMatrixAt(i++, studDummy.matrix);
+    }
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  return mesh;
+}
+
+/**
+ * A row of identical small cylindrical roof vents/ducts as ONE InstancedMesh
+ * (V3.0 PHASE 1 absolute rule §4 — the same repeated-prop case as the stud
+ * grid, applied to rooftop HVAC ductwork).
+ */
+export function createVentCluster(
+  count: number,
+  spacing: number,
+  color: number,
+  radius = 0.14,
+  height = 0.3,
+): THREE.InstancedMesh {
+  const mesh = new THREE.InstancedMesh(
+    cachedCylinder(radius, radius, height, 10),
+    brickMaterial(color, { roughness: 0.5, metalness: 0.15 }),
+    Math.max(1, count),
+  );
+  mesh.castShadow = true;
+  const start = -((count - 1) * spacing) / 2;
+  for (let i = 0; i < count; i++) {
+    studDummy.position.set(start + i * spacing, 0, 0);
+    studDummy.updateMatrix();
+    mesh.setMatrixAt(i, studDummy.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  return mesh;
+}
+
+/**
+ * A rooftop HVAC condenser unit — a vented box on short feet (V3.0 PHASE 1
+ * §1.3). One per call (terminals only need 1-2), so plain meshes here are
+ * fine; the identical grille slats inside it are what would repeat, and
+ * there are only 3, so a Group reads better than instancing 3 items.
+ */
+export function createHvacUnit(width = 0.9, height = 0.5, depth = 0.7): THREE.Group {
+  const group = new THREE.Group();
+  const bodyMat = brickMaterial(0xced3d6, { roughness: 0.4, metalness: 0.2 });
+  const body = new THREE.Mesh(cachedBox(width, height, depth), bodyMat);
+  body.position.y = height / 2;
+  body.castShadow = true;
+  group.add(body);
+
+  const slatMat = brickMaterial(0x8a949c, { roughness: 0.5, metalness: 0.15 });
+  const slatCount = 3;
+  for (let i = 0; i < slatCount; i++) {
+    const slat = new THREE.Mesh(cachedBox(width * 0.82, 0.04, depth * 0.9), slatMat);
+    slat.position.set(0, height * (0.35 + i * 0.22), 0);
+    group.add(slat);
+  }
+  return group;
+}
+
+/** Object name of a radar dish's rotating head, for a caller's per-frame spin. */
+export const RADAR_HEAD_NAME = "radar-head";
+
+/**
+ * A small rotating rooftop radar/weather antenna (V3.0 PHASE 1 §1.3). Only
+ * the returned group's child named RADAR_HEAD_NAME needs to spin — the
+ * caller (Terminal.tickAnimation) rotates it locally each frame; this
+ * factory never touches the scene graph after construction.
+ */
+export function createRadarAntenna(): THREE.Group {
+  const group = new THREE.Group();
+  const postMat = brickMaterial(0x3a4046, { roughness: 0.5, metalness: 0.2 });
+  const post = new THREE.Mesh(cachedCylinder(0.04, 0.05, 0.5, 8), postMat);
+  post.position.y = 0.25;
+  group.add(post);
+
+  const head = new THREE.Group();
+  head.name = RADAR_HEAD_NAME;
+  head.position.y = 0.5;
+  group.add(head);
+
+  const dishMat = brickMaterial(0xe9ecef, { roughness: 0.4, metalness: 0.25 });
+  const dish = new THREE.Mesh(cachedCylinder(0.22, 0.22, 0.03, 12), dishMat);
+  dish.rotation.z = Math.PI / 2.4;
+  dish.castShadow = true;
+  head.add(dish);
+
+  const hub = new THREE.Mesh(cachedCylinder(0.04, 0.04, 0.12, 8), postMat);
+  hub.rotation.z = Math.PI / 2.4;
+  head.add(hub);
+
+  return group;
+}
+
 /** A flat rectangular panel — glass, signage, or a plain accent wall. */
 export function createPanel(
   width: number,
@@ -296,34 +420,47 @@ const signMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
 
 /**
  * A lit signage panel with `text` baked into a small canvas texture —
- * created once per distinct text and cached, so N terminals sharing a label
- * cost one canvas render + one GPU upload total (V2.0 STEP 1 REWORK §8/§36:
- * "가능하면 shared geometry/material을 사용한다", no per-frame or per-window
- * mesh explosion). Uses MeshBasicMaterial so the sign still reads clearly at
- * night-dark shadow angles, like real backlit airport signage.
+ * created once per distinct (text, background, foreground) combination and
+ * cached, so N terminals/gates sharing a label cost one canvas render + one
+ * GPU upload total (V2.0 STEP 1 REWORK §8/§36: "가능하면 shared
+ * geometry/material을 사용한다", no per-frame or per-window mesh explosion).
+ * Uses MeshBasicMaterial so the sign still reads clearly at night-dark
+ * shadow angles, like real backlit airport signage.
+ *
+ * `bg`/`fg` default to the original dark-navy/white "AIRPORT" facade sign so
+ * every existing call site is unaffected; V3.0 PHASE 1's yellow "A1/A2/A3"
+ * gate-number signs (spec §1.4) pass their own colours instead of a new
+ * function.
  */
-export function createSignboard(text: string, width: number, height: number): THREE.Mesh {
-  let texture = signTextureCache.get(text);
+export function createSignboard(
+  text: string,
+  width: number,
+  height: number,
+  bg = "#0b1f38",
+  fg = "#ffffff",
+): THREE.Mesh {
+  const cacheKey = `${text}|${bg}|${fg}`;
+  let texture = signTextureCache.get(cacheKey);
   if (!texture) {
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 128;
     const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#0b1f38";
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = fg;
     ctx.font = "bold 72px 'Segoe UI', Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4);
     texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    signTextureCache.set(text, texture);
+    signTextureCache.set(cacheKey, texture);
   }
-  let material = signMaterialCache.get(text);
+  let material = signMaterialCache.get(cacheKey);
   if (!material) {
     material = new THREE.MeshBasicMaterial({ map: texture });
-    signMaterialCache.set(text, material);
+    signMaterialCache.set(cacheKey, material);
   }
   return new THREE.Mesh(cachedBox(width, height, 0.06), material);
 }

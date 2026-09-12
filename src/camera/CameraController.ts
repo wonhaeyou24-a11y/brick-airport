@@ -8,12 +8,25 @@ import * as THREE from "three";
  * (mobile), reset to the default framing, and focusOn() which glides the
  * look-at point toward a selected object. No rotation, no free pan.
  */
-const DEFAULT_VIEW_SIZE = 46;
-const MIN_VIEW_SIZE = 14;
+/**
+ * V3.0 PHASE 1 §3 — a dense, close-in diorama framing instead of a wide
+ * overview: DEFAULT_VIEW_SIZE dropped from 46 (nearly the whole starting
+ * grid, mostly empty grass) to fill most of the frame with the terminal +
+ * apron cluster on load/reset. Game.ts's CAMERA_HOME_VIEW_FRACTION applies
+ * the same tightened ratio on top of each expansion tier's worldSize, so
+ * this constant is really just the pre-Game-override starting point.
+ */
+const DEFAULT_VIEW_SIZE = 26;
+/** Closest manual zoom-in (mouse wheel / pinch / +/- button), tightened from
+ * 14 so the player can push in past the default framing too (spec §3.3). */
+const MIN_VIEW_SIZE = 10;
 const MAX_VIEW_SIZE = 95;
 const CAMERA_DISTANCE = 120;
-/** Default look-at point: biased toward the apron so terminal + runway frame well. */
-const DEFAULT_TARGET = new THREE.Vector3(0, 0, 5);
+/** Default look-at point (spec §3.1) — the apron in front of the terminal
+ * (the fixed starting gate row sits at x ~ -5..7, z ~ 8..10; the terminal
+ * frontage begins around z ~ 12), not the empty patch of grass between the
+ * runway and the gates the old (0,0,5) target framed. */
+const DEFAULT_TARGET = new THREE.Vector3(1, 0, 10);
 /** Fraction of the remaining focus distance covered per second (via pow). */
 const FOCUS_RESPONSE = 0.0025;
 /** Stop the glide once this close to the goal (world units). */

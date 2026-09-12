@@ -18,6 +18,7 @@ import type {
 import { GameLoop } from "./GameLoop";
 import { GateStatusSync } from "./GateStatusSync";
 import { AirportWorld } from "../world/AirportWorld";
+import { Lighting, applyToneMapping } from "../world/Lighting";
 import { GridOccupancy } from "../world/GridOccupancy";
 import { GridCursor } from "../world/GridCursor";
 import { worldToCell } from "../world/Grid";
@@ -120,6 +121,16 @@ function isLowPowerDevice(): boolean {
 /** Periodic autosave interval, in accumulated game-seconds (spec §C.1). */
 const AUTOSAVE_INTERVAL = 60;
 /**
+ * Fraction of an expansion tier's worldSize the camera's home/reset framing
+ * shows (V3.0 PHASE 1 §3.2 — "화면의 75% 이상이 터미널 창문과 주기장으로 꽉
+ * 차는" dense diorama framing). Was 0.96 (nearly the whole grid, mostly
+ * empty grass at the starting tier); a smaller fraction keeps the terminal +
+ * apron cluster dominant at every expansion tier while manual zoom (mouse
+ * wheel / pinch / +/- buttons, still clamped to CameraController's own
+ * MIN/MAX_VIEW_SIZE) remains the way to see the wider grid for placement.
+ */
+const CAMERA_HOME_VIEW_FRACTION = 0.56;
+/**
  * Floor between an event-triggered save (mission/building/level/flight) and
  * the previous save — event triggers only set `savePending`; this is what
  * actually gates writing, so a burst of events in one frame never becomes a
@@ -131,6 +142,7 @@ export class Game {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
+  private readonly lighting: Lighting;
   /** Decided once at startup from viewport/pointer heuristics (V1.3-E). */
   private readonly lowPowerDevice: boolean;
 
@@ -234,11 +246,13 @@ export class Game {
     this.renderer.shadowMap.type = this.lowPowerDevice
       ? THREE.PCFShadowMap
       : THREE.PCFSoftShadowMap;
+    // V3.0 PHASE 1 §4.1 — toy-plastic ACES Filmic tone-mapping pipeline.
+    applyToneMapping(this.renderer);
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8ecae6);
 
-    this.addLights();
+    this.lighting = this.addLights();
 
     // Loading a save (spec §B.6/§B.7): GameState's own constructor is already
     // the full migration pipeline (old version -> current schema), and every
@@ -266,7 +280,8 @@ export class Game {
     this.expansionOverlay.setLevel(this.state.airport.expansionLevel ?? 0);
     this.scene.add(this.expansionOverlay.object);
     this.cameraController.setHomeViewSize(
-      expansionTier(this.state.airport.expansionLevel ?? 0).worldSize * 0.96,
+      expansionTier(this.state.airport.expansionLevel ?? 0).worldSize *
+        CAMERA_HOME_VIEW_FRACTION,
     );
     this.cameraController.setPanBounds(
       expansionTier(this.state.airport.expansionLevel ?? 0).worldSize / 2,
@@ -501,6 +516,7 @@ export class Game {
     this.expansionOverlay.dispose();
     this.gridCursor.dispose();
     this.world.dispose();
+    this.lighting.dispose();
     this.renderer.dispose();
   }
 
@@ -660,7 +676,7 @@ export class Game {
     this.hud.showSpend(tier.cost);
     this.state.airport.expansionLevel = level + 1;
     this.expansionOverlay.setLevel(level + 1);
-    this.cameraController.setHomeViewSize(tier.worldSize * 0.96);
+    this.cameraController.setHomeViewSize(tier.worldSize * CAMERA_HOME_VIEW_FRACTION);
     this.cameraController.setPanBounds(tier.worldSize / 2);
     // Expansion confirmation (spec §13) — from/to size + cost, same pair as
     // the build-confirmation notice pattern (showNotice + showSpend).
@@ -725,24 +741,15 @@ export class Game {
     }
   }
 
-  private addLights(): void {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x8d9db6, 1.05);
-    this.scene.add(hemi);
-
-    const sun = new THREE.DirectionalLight(0xfff2d8, 1.6);
-    sun.position.set(28, 40, 18);
-    sun.castShadow = !this.lowPowerDevice; // spec §22/§26 — shadows off on small/touch devices
-    const mapSize = this.lowPowerDevice ? 512 : 1024;
-    sun.shadow.mapSize.set(mapSize, mapSize);
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 140;
-    // Covers the fully-expanded 80x80 airport (V1.2-D) with a small margin.
-    const s = 42;
-    sun.shadow.camera.left = -s;
-    sun.shadow.camera.right = s;
-    sun.shadow.camera.top = s;
-    sun.shadow.camera.bottom = -s;
-    this.scene.add(sun);
+  /**
+   * V3.0 PHASE 1 §4 — the toy-plastic lighting rig now lives in
+   * world/Lighting.ts (hemisphere fill + a ~60°-elevation directional sun
+   * with a 2048x2048 shadow map on capable devices), same lowPowerDevice-
+   * aware scaling as before. Returns the instance so the constructor can
+   * keep it for dispose().
+   */
+  private addLights(): Lighting {
+    return new Lighting(this.scene, this.lowPowerDevice);
   }
 
   private collectSelectables(): Selectable[] {
