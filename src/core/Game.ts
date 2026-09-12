@@ -83,6 +83,8 @@ import { Economy } from "../economy/Economy";
 import { CameraController } from "../camera/CameraController";
 import { SelectionManager } from "../selection/SelectionManager";
 import type { Selectable } from "../selection/Selectable";
+import { setHoverEffect } from "../selection/hoverEffect";
+import { SelectionRing } from "../selection/SelectionRing";
 import type { StaffRole } from "./GameState";
 import {
   HUD,
@@ -151,6 +153,10 @@ export class Game {
   private readonly world: AirportWorld;
   private readonly occupancy: GridOccupancy;
   private readonly gridCursor: GridCursor;
+  private readonly selectionRing: SelectionRing;
+  /** V3.0 PHASE 4 §1.1 — the Selectable whose hover-effect is currently on,
+   * so onHoverObjectChange can turn off exactly that one and no other. */
+  private hoveredSelectable: Selectable | null = null;
   private readonly buildingPreview: BuildingPreview;
   private readonly expansionOverlay: ExpansionOverlay;
   private readonly buildController: BuildController;
@@ -273,6 +279,11 @@ export class Game {
     this.gridCursor = new GridCursor();
     this.scene.add(this.gridCursor.object);
 
+    // V3.0 PHASE 4 §1.2 — the spinning ground ring under whatever is
+    // selected; hidden until onSelectionChange() gives it a target.
+    this.selectionRing = new SelectionRing();
+    this.scene.add(this.selectionRing.object);
+
     this.buildingPreview = new BuildingPreview();
     this.scene.add(this.buildingPreview.object);
 
@@ -361,6 +372,7 @@ export class Game {
     );
     this.selection.onSelectionChange((s) => this.onSelectionChange(s));
     this.selection.onHover((point) => this.onHoverGround(point));
+    this.selection.onHoverObject((s) => this.onHoverObjectChange(s));
     this.selection.onGroundTap((point) => this.onGroundTap(point));
 
     this.hud = new HUD(
@@ -515,6 +527,7 @@ export class Game {
     this.buildingPreview.dispose();
     this.expansionOverlay.dispose();
     this.gridCursor.dispose();
+    this.selectionRing.dispose();
     this.world.dispose();
     this.lighting.dispose();
     this.renderer.dispose();
@@ -823,6 +836,10 @@ export class Game {
     this.gridCursor.setSelected(null);
     this.state.setSelectedCell(null);
     this.shownAircraftSig = "";
+    // V3.0 PHASE 4 §1.2 — the ground ring always tracks the current
+    // selection (or hides when nothing is selected), independent of camera
+    // follow/focus below.
+    this.selectionRing.setTarget(selected ? selected.object : null);
 
     if (selected) {
       this.state.setSelection(selected.selectionKind, selected.id);
@@ -838,6 +855,25 @@ export class Game {
       this.hud.setSelection(null);
       this.hud.setSelectedTarget(null);
       this.cameraController.followTarget(null);
+    }
+  }
+
+  /**
+   * V3.0 PHASE 4 §1.1 — the cursor-hover glow/bounce, scoped to the moving
+   * entity kinds the spec calls out (aircraft, ground vehicles, staff,
+   * passengers) and skipping BUILDING (gates/terminal/facilities): a
+   * building's construction pop-in animation already drives `object.scale`
+   * on placement, and hover-bouncing a large static structure would both
+   * fight that and read oddly for something that size.
+   */
+  private onHoverObjectChange(hovered: Selectable | null): void {
+    if (this.hoveredSelectable && this.hoveredSelectable !== hovered) {
+      setHoverEffect(this.hoveredSelectable.object, false);
+    }
+    this.hoveredSelectable = null;
+    if (hovered && hovered.selectionKind !== "BUILDING") {
+      setHoverEffect(hovered.object, true);
+      this.hoveredSelectable = hovered;
     }
   }
 
@@ -1221,6 +1257,7 @@ export class Game {
 
   private update(deltaTime: number): void {
     this.cameraController.update(deltaTime);
+    this.selectionRing.update(deltaTime);
     // World-level cosmetic animation (V1.9): gate jet-bridges + construction
     // pop-in. Purely visual — see AirportWorld.update()'s own doc comment.
     this.world.update(deltaTime);

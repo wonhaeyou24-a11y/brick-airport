@@ -27,8 +27,17 @@ export class SelectionManager {
 
   private readonly selectionListeners: SelectionListener[] = [];
   private readonly hoverListeners: GroundListener[] = [];
+  private readonly hoverObjectListeners: SelectionListener[] = [];
   private readonly groundTapListeners: GroundListener[] = [];
   private current: Selectable | null = null;
+  /** V3.0 PHASE 4 §1.1 — whatever the mouse is currently over, so the
+   * listener only fires ON CHANGE (enter/leave), never every mousemove. */
+  private hoveredObject: Selectable | null = null;
+  /** Reused scratch array for updateHoverObject()'s raycast roots (V3.0
+   * PHASE 4 §2.2 — hover fires on every mousemove, far more often than
+   * tapAt()'s own per-click `.map()`, so this one specifically is worth
+   * not reallocating every call). */
+  private readonly hoverRoots: THREE.Object3D[] = [];
 
   private downX = 0;
   private downY = 0;
@@ -68,6 +77,16 @@ export class SelectionManager {
     this.hoverListeners.push(listener);
   }
 
+  /**
+   * V3.0 PHASE 4 §1.1 — fires only when the hovered SELECTABLE OBJECT
+   * changes (enter with the new one, then null on leave), mouse only, same
+   * gating as onHover's ground raycast. Distinct from onHover, which always
+   * reports the ground point regardless of what's under the cursor.
+   */
+  onHoverObject(listener: SelectionListener): void {
+    this.hoverObjectListeners.push(listener);
+  }
+
   onGroundTap(listener: GroundListener): void {
     this.groundTapListeners.push(listener);
   }
@@ -97,6 +116,7 @@ export class SelectionManager {
     this.canvas.removeEventListener("pointerleave", this.onPointerLeave);
     this.selectionListeners.length = 0;
     this.hoverListeners.length = 0;
+    this.hoverObjectListeners.length = 0;
     this.groundTapListeners.length = 0;
   }
 
@@ -118,7 +138,32 @@ export class SelectionManager {
     if (this.activePointerCount !== 0 || event.pointerType === "touch") return;
     const point = this.raycastGround(event.clientX, event.clientY);
     for (const listener of this.hoverListeners) listener(point);
+    this.updateHoverObject(event.clientX, event.clientY);
   };
+
+  /**
+   * V3.0 PHASE 4 §1.1 — same object-picking raycast tapAt() already does,
+   * reused for hover instead of select. Only notifies listeners on an
+   * actual enter/leave change, never every mousemove, so the hover-effect
+   * toggle in Game.ts stays cheap regardless of how often the mouse moves.
+   */
+  private updateHoverObject(clientX: number, clientY: number): void {
+    this.setPointer(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    let found: Selectable | null = null;
+    if (this.pickingEnabled) {
+      this.hoverRoots.length = 0;
+      for (const s of this.getSelectables()) this.hoverRoots.push(s.object);
+      const hits = this.raycaster.intersectObjects(this.hoverRoots, true);
+      for (const hit of hits) {
+        found = findSelectable(hit.object);
+        if (found) break;
+      }
+    }
+    if (found === this.hoveredObject) return;
+    this.hoveredObject = found;
+    for (const listener of this.hoverObjectListeners) listener(found);
+  }
 
   private onPointerUp = (event: PointerEvent): void => {
     this.activePointerCount = Math.max(0, this.activePointerCount - 1);
@@ -141,6 +186,10 @@ export class SelectionManager {
 
   private onPointerLeave = (): void => {
     for (const listener of this.hoverListeners) listener(null);
+    if (this.hoveredObject) {
+      this.hoveredObject = null;
+      for (const listener of this.hoverObjectListeners) listener(null);
+    }
   };
 
   private tapAt(clientX: number, clientY: number): void {

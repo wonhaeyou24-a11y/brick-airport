@@ -1480,11 +1480,19 @@ body {
 
   .activity-cards {
     gap: 8px;
+    /* V3.0 PHASE 4 §3.3 — a real swipeable carousel instead of free
+       scrolling: each card snaps to the left edge of the row so a swipe
+       lands on one card at a time, matching the reference's mobile dock. */
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px; /* room for the snap scrollbar not to clip a shadow */
   }
 
   .activity-card {
     flex: 0 0 62vw;
     min-width: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
 
   .build-menu {
@@ -1609,4 +1617,53 @@ body {
     display: none;
   }
 
+}
+
+/* V3.0 PHASE 4 §3.2 — a distinct tablet-landscape tier (1024x768 and
+   similar), between the full desktop layout above and the compact
+   portrait/narrow-phone layout above. Deliberately scoped to LANDSCAPE
+   only: a portrait tablet (e.g. 768x1024) already matches the
+   `orientation: portrait` clause in the mobile query above and gets that
+   fuller compaction instead, so the two tiers never fight over the same
+   device shape. Desktop and phones both fall through this block untouched. */
+@media (min-width: 769px) and (max-width: 1180px) and (orientation: landscape) {
+  .nav-item .nav-label {
+    display: none; /* icon-only, same compact tile the mobile tier uses */
+  }
+
+  .nav-item {
+    justify-content: center;
+    padding: 8px 4px;
+  }
+
+  .navrail {
+    width: 56px;
+    padding: 4px;
+  }
+
+  .drawer {
+    left: calc(56px + var(--hud-gap) * 2);
+  }
+
+  .info-slot {
+    left: calc(56px + var(--hud-gap) * 2);
+  }
+
+  .build-menu {
+    left: calc(56px + var(--hud-gap) * 2);
+  }
+
+  /* "하단 카드 여백 축소" — tighter gaps/padding than the full desktop
+     dock, without dropping to the phone-width 62vw single-card sizing. */
+  .activity-cards {
+    gap: 8px;
+  }
+
+  .activity-card {
+    min-width: 168px;
+  }
+
+  .ac-card-body {
+    padding: 6px 10px 8px;
+  }
 }
