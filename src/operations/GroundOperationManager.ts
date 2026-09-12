@@ -306,6 +306,18 @@ export class GroundOperationManager {
     this.recordCompletion(op);
     notices.push(`${OP_ICON[op.type] ?? "🔧"} ${stateLabel(op.type)} 완료`);
 
+    // V2.4 hardening — a flight that ever picked up a duplicate operation of
+    // the same type (the since-fixed reload-duplication bug) only ever
+    // needs ONE of them to actually finish; cancel any still-PENDING
+    // siblings of the same type for this flight so old saves already
+    // carrying that leftover backlog clear it immediately instead of
+    // grinding through every duplicate one at a time.
+    for (const sibling of this.state.getGroundOperationsForFlight(op.flightId)) {
+      if (sibling.id !== op.id && sibling.type === op.type && sibling.state === "PENDING") {
+        sibling.state = "CANCELLED";
+      }
+    }
+
     // Shuttle the vehicle / staff straight to another gate that needs them,
     // else send them home.
     if (vehicleId) {

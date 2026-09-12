@@ -60,13 +60,27 @@ export function createGroundOperation(
  * order, that is not COMPLETED / CANCELLED. undefined when the turnaround is
  * done. Enforces the sequential ordering (spec §25) — later tasks are not
  * eligible until the earlier ones finish.
+ *
+ * V2.4 hardening — this used `ops.find(o => o.type === type)`, which only
+ * ever looked at the FIRST operation of each type (in creation order). A
+ * flight that ever ended up with more than one operation of the same type —
+ * confirmed to happen from a since-fixed reload bug that duplicated a whole
+ * turnaround — got permanently stuck: the first (already-COMPLETED) op of a
+ * type made the loop treat that whole stage as done and skip straight to the
+ * next type, so every duplicate PENDING op sat forever, un-worked, un-
+ * completed, and (since GameState.areGroundOperationsComplete requires EVERY
+ * operation for the flight to be over) the flight itself could never finish
+ * either. Now searches every operation of the type and only advances to the
+ * next stage once ALL of them are over.
  */
 export function nextPendingOperation(
   ops: readonly GroundOperationData[],
 ): GroundOperationData | undefined {
   for (const type of TURNAROUND_SEQUENCE) {
-    const op = ops.find((o) => o.type === type);
-    if (op && !isGroundOperationOver(op.state)) return op;
+    const pending = ops.find(
+      (o) => o.type === type && !isGroundOperationOver(o.state),
+    );
+    if (pending) return pending;
   }
   return undefined;
 }
