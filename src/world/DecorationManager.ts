@@ -46,9 +46,12 @@ export class DecorationManager {
     this.object.name = "decorations";
 
     this.buildParkingLot();
+    this.buildParkingLines();
     this.buildTreeLines();
     this.buildPerimeterFence();
+    this.buildRunwayFence();
     this.buildWindsock();
+    this.buildLightTower();
     this.buildConeCluster();
   }
 
@@ -124,6 +127,39 @@ export class DecorationManager {
     lot.position.set(0, 0.01, startZ + (spacingZ * (rows - 1)) / 2);
     lot.receiveShadow = true;
     this.object.add(lot);
+  }
+
+  /**
+   * White parking-space divider lines under the car grid (V3.0 PHASE 2 §4.1
+   * — "흰색 주차선"), one InstancedMesh for every line regardless of how many
+   * spaces the lot has.
+   */
+  private buildParkingLines(): void {
+    const cols = 10;
+    const rows = 2;
+    const spacingX = 2.0;
+    const spacingZ = 2.3;
+    const startX = -((cols - 1) * spacingX) / 2;
+    const startZ = 22;
+
+    const lineGeo = new THREE.BoxGeometry(0.05, 0.01, spacingZ * rows + 0.4);
+    this.geometries.push(lineGeo);
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.5 });
+    this.materials.push(lineMat);
+
+    // One divider line between every pair of adjacent spaces, plus the two
+    // outer boundary lines — cols + 1 lines total.
+    const count = cols + 1;
+    const lines = new THREE.InstancedMesh(lineGeo, lineMat, count);
+    this.instancedMeshes.push(lines);
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < count; i++) {
+      const x = startX - spacingX / 2 + i * spacingX;
+      m.makeTranslation(x, 0.018, startZ + (spacingZ * (rows - 1)) / 2);
+      lines.setMatrixAt(i, m);
+    }
+    lines.instanceMatrix.needsUpdate = true;
+    this.object.add(lines);
   }
 
   // -------------------------------------------------------------- tree lines --
@@ -241,6 +277,47 @@ export class DecorationManager {
     this.object.add(postMesh, railHighMesh, railLowMesh);
   }
 
+  /**
+   * A separate white block fence line along the runway's outer boundary
+   * (V3.0 PHASE 2 §4.2 — "활주로 경계선을 따라 이어지는 흰색 블록 펜스"),
+   * distinct from the parking-lot fence above. The runway spans roughly
+   * x:[-18,18] z:[-4,4] (the same footprint the windsock placement below
+   * already reasons from); this line runs along z = -6, the far outer edge
+   * away from the terminal/taxiway/apron cluster, so it never crosses any
+   * gameplay lane.
+   */
+  private buildRunwayFence(): void {
+    const postGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6);
+    const railGeo = new THREE.BoxGeometry(1.6, 0.045, 0.045);
+    this.geometries.push(postGeo, railGeo);
+
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0xf2f4f5, roughness: 0.6 });
+    this.materials.push(fenceMat);
+
+    const segCount = 18;
+    const spacing = 1.9;
+    const startX = -((segCount - 1) * spacing) / 2;
+    const z = -6;
+
+    const postMesh = new THREE.InstancedMesh(postGeo, fenceMat, segCount);
+    const railMesh = new THREE.InstancedMesh(railGeo, fenceMat, segCount - 1);
+    this.instancedMeshes.push(postMesh, railMesh);
+
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < segCount; i++) {
+      m.makeTranslation(startX + i * spacing, 0.4, z);
+      postMesh.setMatrixAt(i, m);
+      if (i < segCount - 1) {
+        m.makeTranslation(startX + i * spacing + spacing / 2, 0.55, z);
+        railMesh.setMatrixAt(i, m);
+      }
+    }
+    postMesh.instanceMatrix.needsUpdate = true;
+    railMesh.instanceMatrix.needsUpdate = true;
+
+    this.object.add(postMesh, railMesh);
+  }
+
   // -------------------------------------------------------------- windsock --
 
   private buildWindsock(): void {
@@ -283,6 +360,60 @@ export class DecorationManager {
     // Placed just past the runway's east threshold, clear of the taxiway
     // corridor and every gameplay lane (runway spans x:[-18,18], z:[-4,4]).
     group.position.set(21, 0, -2);
+    this.object.add(group);
+  }
+
+  /**
+   * A runway floodlight tower beside the windsock (V3.0 PHASE 2 §4.3's
+   * "조명 타워") — a tall mast with a small cluster of angled floodlight
+   * heads. Only one exists, but the floodlight heads within it are a
+   * repeated small part, so they're still one InstancedMesh rather than one
+   * Mesh per head.
+   */
+  private buildLightTower(): void {
+    const mastGeo = new THREE.CylinderGeometry(0.07, 0.1, 4.2, 8);
+    this.geometries.push(mastGeo);
+    const mastMat = new THREE.MeshStandardMaterial({ color: 0xbfc7cc, roughness: 0.55, metalness: 0.2 });
+    this.materials.push(mastMat);
+
+    const group = new THREE.Group();
+    const mast = new THREE.Mesh(mastGeo, mastMat);
+    mast.position.y = 2.1;
+    mast.castShadow = true;
+    group.add(mast);
+
+    const rigGeo = new THREE.BoxGeometry(0.9, 0.06, 0.06);
+    this.geometries.push(rigGeo);
+    const rig = new THREE.Mesh(rigGeo, mastMat);
+    rig.position.y = 4.15;
+    group.add(rig);
+
+    const headGeo = new THREE.BoxGeometry(0.22, 0.16, 0.12);
+    this.geometries.push(headGeo);
+    const headMat = new THREE.MeshStandardMaterial({
+      color: 0xfff2b2,
+      roughness: 0.3,
+      emissive: 0xfff2b2,
+      emissiveIntensity: 0.4,
+    });
+    this.materials.push(headMat);
+    const headCount = 4;
+    const heads = new THREE.InstancedMesh(headGeo, headMat, headCount);
+    this.instancedMeshes.push(heads);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    for (let i = 0; i < headCount; i++) {
+      const x = -0.33 + i * 0.22;
+      q.setFromEuler(new THREE.Euler(-0.5, 0, 0));
+      m.compose(new THREE.Vector3(x, 4.05, 0.08), q, new THREE.Vector3(1, 1, 1));
+      heads.setMatrixAt(i, m);
+    }
+    heads.instanceMatrix.needsUpdate = true;
+    group.add(heads);
+
+    // Beside the windsock, clear of every gameplay lane (same reasoning as
+    // the windsock's own placement comment above).
+    group.position.set(23, 0, -2);
     this.object.add(group);
   }
 

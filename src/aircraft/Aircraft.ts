@@ -122,18 +122,34 @@ export class Aircraft implements Selectable {
     nose.position.set(halfFuselage + fuselageRadius, 0.7 * s, 0);
     group.add(nose);
 
-    // Cabin window stripe along both sides of the fuselage — a single thin
-    // decal-like band per side rather than dozens of individual window
-    // meshes (spec §14's "각 창문을 무수히 많은 독립 Mesh로 만들지 않는다").
-    const windowStripeMat = brickMaterial(0x1c2b38, { roughness: 0.25, metalness: 0.1 });
+    // Cabin windows — V3.0 PHASE 2 §1.1's "블록 타일 인라인 결합": individual
+    // smoke-blue/black tiles reading as separate passenger windows, not one
+    // flat decal stripe, but still exactly ONE draw call per side via
+    // InstancedMesh (the absolute rule against a mesh-per-window explosion
+    // the old single-stripe design was itself already avoiding, just with a
+    // less convincing result up close).
+    const windowTileMat = brickMaterial(0x1c2b38, { roughness: 0.2, metalness: 0.15 });
+    const windowTileGeo = new THREE.BoxGeometry(0.1 * s, 0.09 * s, 0.03 * s);
+    const windowSpan = fuselageLength * 0.62;
+    const windowSpacing = 0.16 * s;
+    const windowCount = Math.max(3, Math.floor(windowSpan / windowSpacing));
+    const windowTiles = new THREE.InstancedMesh(windowTileGeo, windowTileMat, windowCount * 2);
+    const windowDummy = new THREE.Object3D();
+    const windowStart = -windowSpan / 2;
+    let windowInstance = 0;
     for (const side of [-1, 1]) {
-      const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(fuselageLength * 0.62, 0.1 * s, 0.03 * s),
-        windowStripeMat,
-      );
-      stripe.position.set(-0.05 * s, 0.78 * s, side * fuselageRadius * 0.99);
-      group.add(stripe);
+      for (let i = 0; i < windowCount; i++) {
+        windowDummy.position.set(
+          windowStart + i * windowSpacing - 0.05 * s,
+          0.78 * s,
+          side * fuselageRadius * 0.99,
+        );
+        windowDummy.updateMatrix();
+        windowTiles.setMatrixAt(windowInstance++, windowDummy.matrix);
+      }
     }
+    windowTiles.instanceMatrix.needsUpdate = true;
+    group.add(windowTiles);
 
     // Cockpit windshield — a small dark flat panel on the nose.
     const windshield = new THREE.Mesh(
@@ -250,6 +266,20 @@ export class Aircraft implements Selectable {
       fan.rotation.y = Math.PI / 2;
       group.add(fan);
       this.engines.push(fan);
+
+      // Turbine spinner cone — the pointed nose cap real turbofans have at
+      // the hub of the fan disc (spec §1.2's "전면 터빈 팬 블레이드 흡기구
+      // 표현"). A spinning DISC already reads as a fast-moving fan blade
+      // blur better than a handful of static discrete blades would at this
+      // silhouette scale, so the spinner cap is what actually sells "turbine"
+      // rather than "propeller" up close.
+      const spinner = new THREE.Mesh(
+        new THREE.ConeGeometry(0.07 * s, 0.16 * s, 10),
+        intakeMat,
+      );
+      spinner.rotation.z = -Math.PI / 2;
+      spinner.position.set(0.1 * s + 0.4 * s, 0.35 * s, ez);
+      group.add(spinner);
     }
 
     // Landing gear — small dark stubs, hidden while FLYING (spec §13's
@@ -271,8 +301,23 @@ export class Aircraft implements Selectable {
       strut.position.y = 0.25 * s;
       legGroup.add(strut);
 
-      // Wheel + axle at the foot of the strut, so gear reads as a real
-      // undercarriage assembly (spec: "바퀴 휠과 서스펜션 축이 보이는").
+      // Suspension brace — a short diagonal metal stay from mid-strut back
+      // to the fuselage, so the leg reads as a braced strut assembly rather
+      // than a bare pole (spec §1.3's "서스펜션 금속 지지대"). Only 3 of
+      // these exist per aircraft, so a plain Mesh each is fine — nowhere
+      // near the count InstancedMesh exists to avoid.
+      const braceMat = brickMaterial(0x5a6472, { roughness: 0.45, metalness: 0.4 });
+      const brace = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018 * s, 0.018 * s, 0.34 * s, 6),
+        braceMat,
+      );
+      brace.position.set(-Math.sign(gx || 1) * 0.09 * s, 0.32 * s, 0);
+      brace.rotation.z = Math.sign(gx || 1) * 0.5;
+      legGroup.add(brace);
+
+      // Wheel with a separate lighter hub/rim disc inset into the dark tyre
+      // (spec §1.3's "검은색 블록 휠") — reads as a real wheel-and-rim
+      // assembly instead of one flat-colored cylinder.
       const wheel = new THREE.Mesh(
         new THREE.CylinderGeometry(0.09 * s, 0.09 * s, 0.07 * s, 12),
         wheelMat,
@@ -280,6 +325,12 @@ export class Aircraft implements Selectable {
       wheel.rotation.x = Math.PI / 2;
       wheel.position.y = 0.03 * s;
       legGroup.add(wheel);
+
+      const hubMat = brickMaterial(0x6b7079, { roughness: 0.4, metalness: 0.5 });
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.045 * s, 0.045 * s, 0.075 * s, 10), hubMat);
+      hub.rotation.x = Math.PI / 2;
+      hub.position.y = 0.03 * s;
+      legGroup.add(hub);
 
       this.gear.push(legGroup);
     }

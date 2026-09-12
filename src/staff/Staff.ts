@@ -21,19 +21,27 @@ import { staffRoleLabel } from "./StaffConfig";
 const geo = {
   // Rounded head, matching Passenger.ts's minifig update (kept off a
   // uniform LEGO-yellow to stay an original design, per CLAUDE.md §1).
-  head: new THREE.SphereGeometry(0.2, 12, 9),
+  // V3.0 PHASE 2 §3.1 — enlarged from 0.2 toward a ~2.5-heads-tall "block
+  // toy figure" proportion (was closer to 3, real-minifig-like) without
+  // shrinking the whole body, which would have moved where hands/props sit
+  // relative to gates/vehicles tuned against the old total height.
+  head: new THREE.SphereGeometry(0.24, 12, 9),
+  // Stud neck connector — the classic minifig head-to-torso joint (spec
+  // §3.1's "스터드 넥").
+  neck: new THREE.CylinderGeometry(0.09, 0.09, 0.07, 10),
   // Safety helmet — a rounded dome instead of a flat cap slab, reading as
   // real ground-crew PPE (spec: "헬멧/안전모").
-  cap: new THREE.SphereGeometry(0.22, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
+  cap: new THREE.SphereGeometry(0.26, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
   body: new THREE.BoxGeometry(0.42, 0.5, 0.28),
   vest: new THREE.BoxGeometry(0.46, 0.4, 0.32),
   limb: new THREE.BoxGeometry(0.12, 0.44, 0.12),
   broom: new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6),
   crate: new THREE.BoxGeometry(0.3, 0.26, 0.24),
-  hat: new THREE.SphereGeometry(0.22, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
+  hat: new THREE.SphereGeometry(0.26, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
 };
 
 const headMat = new THREE.MeshStandardMaterial({ color: 0xe0a878, roughness: 0.75 });
+const neckMat = new THREE.MeshStandardMaterial({ color: 0xc98f66, roughness: 0.7 });
 const limbMat = new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.8 });
 const capMat = new THREE.MeshStandardMaterial({ color: 0x22333b, roughness: 0.8 });
 const propMat = new THREE.MeshStandardMaterial({ color: 0x6b4f3a, roughness: 0.85 });
@@ -67,6 +75,8 @@ export class Staff implements Selectable {
   private readonly tmpDir = new THREE.Vector3();
   private legL: THREE.Mesh | null = null;
   private legR: THREE.Mesh | null = null;
+  private armL: THREE.Mesh | null = null;
+  private armR: THREE.Mesh | null = null;
   private walkClock = 0;
   private walking = false;
 
@@ -93,18 +103,24 @@ export class Staff implements Selectable {
     vest.position.y = 0.66;
     this.object.add(vest);
 
+    // Stud neck connector (spec §3.1) between the torso and the enlarged
+    // "chibi" head.
+    const neck = new THREE.Mesh(geo.neck, neckMat);
+    neck.position.y = 0.9;
+    this.object.add(neck);
+
     const head = new THREE.Mesh(geo.head, headMat);
-    head.position.y = 1.03;
+    head.position.y = 1.07;
     head.castShadow = true;
     this.object.add(head);
 
     if (role === "FUEL_OPERATOR") {
       const hat = new THREE.Mesh(geo.hat, hatMat);
-      hat.position.y = 1.03;
+      hat.position.y = 1.07;
       this.object.add(hat);
     } else {
       const cap = new THREE.Mesh(geo.cap, capMat);
-      cap.position.y = 1.03;
+      cap.position.y = 1.07;
       this.object.add(cap);
     }
 
@@ -112,6 +128,8 @@ export class Staff implements Selectable {
       const arm = new THREE.Mesh(geo.limb, vestMats[role]);
       arm.position.set(sx * 0.29, 0.64, 0);
       this.object.add(arm);
+      if (sx < 0) this.armL = arm;
+      else this.armR = arm;
       const leg = new THREE.Mesh(geo.limb, limbMat);
       leg.position.set(sx * 0.12, 0.22, 0);
       this.object.add(leg);
@@ -146,7 +164,12 @@ export class Staff implements Selectable {
     }
   }
 
-  /** Simple walking leg-swing (spec §15/§23) — cosmetic only, never touches `data`. */
+  /**
+   * Walking leg-swing plus opposite-phase arm-swing (spec §3.3's "팔/다리가
+   * 전후로 교차 스윙") — cosmetic only, never touches `data`. Arms swing
+   * opposite their same-side leg (left arm forward with the right leg
+   * forward), the natural cross-body walking gait.
+   */
   tickAnimation(deltaTime: number): void {
     if (!this.legL || !this.legR) return;
     if (this.walking) {
@@ -154,10 +177,14 @@ export class Staff implements Selectable {
       const swing = Math.sin(this.walkClock * WALK_RATE * Math.PI * 2) * WALK_SWING;
       this.legL.rotation.x = swing;
       this.legR.rotation.x = -swing;
+      if (this.armL) this.armL.rotation.x = -swing;
+      if (this.armR) this.armR.rotation.x = swing;
     } else if (this.legL.rotation.x !== 0 || this.legR.rotation.x !== 0) {
       this.walkClock = 0;
       this.legL.rotation.x = 0;
       this.legR.rotation.x = 0;
+      if (this.armL) this.armL.rotation.x = 0;
+      if (this.armR) this.armR.rotation.x = 0;
     }
   }
 
@@ -180,6 +207,7 @@ export class Staff implements Selectable {
 export function disposeStaffResources(): void {
   for (const g of Object.values(geo)) g.dispose();
   headMat.dispose();
+  neckMat.dispose();
   limbMat.dispose();
   capMat.dispose();
   propMat.dispose();

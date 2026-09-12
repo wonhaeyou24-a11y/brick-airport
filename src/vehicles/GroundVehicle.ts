@@ -84,6 +84,9 @@ export class GroundVehicle implements Selectable {
    * moving so an idle-parked vehicle doesn't read as "in an emergency". */
   private beaconMat: THREE.MeshStandardMaterial | null = null;
   private beaconClock = 0;
+  /** V3.0 PHASE 2 §2 — the beacon's mount housing, which spins continuously
+   * while moving (separate from beaconMat's blink) for a "회전 경광등" look. */
+  private beaconMount: THREE.Object3D | null = null;
 
   constructor(data: GroundVehicleData) {
     this.data = data;
@@ -171,12 +174,24 @@ export class GroundVehicle implements Selectable {
       }
     }
 
-    // Rooftop amber beacon — a common airport-service-vehicle cue (spec §16).
+    // Rooftop amber beacon on a small mount base — a common airport-service-
+    // vehicle cue (spec §16, rotating housing detail V3.0 PHASE 2 §2's
+    // "회전 경광등"). The mount is what actually spins in tickAnimation();
+    // the beacon sphere itself only ever changes emissiveIntensity, same
+    // blink pattern as before.
+    const beaconMount = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.06, 0.05, 8),
+      brickMaterial(COLORS.terminalDark, { roughness: 0.4, metalness: 0.3 }),
+    );
+    beaconMount.position.set(0, h * 1.1 + 0.12, l / 2 - 0.2);
+    this.object.add(beaconMount);
+    this.beaconMount = beaconMount;
+
     this.beaconMat = brickMaterial(0xffb703, { roughness: 0.3 }).clone();
     this.beaconMat.emissive.setHex(0xffb703);
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), this.beaconMat);
-    beacon.position.set(0, h * 1.15 + 0.12, l / 2 - 0.2);
-    this.object.add(beacon);
+    beacon.position.set(0, 0.08, 0);
+    beaconMount.add(beacon);
 
     // BAGGAGE_CART tows two chained trailer cars (a real "cart train"
     // silhouette) instead of one; every other type keeps no trailer.
@@ -199,6 +214,7 @@ export class GroundVehicle implements Selectable {
     const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.16, 8);
     const wheelMat = brickMaterial(COLORS.vehicleCab, { roughness: 0.9 });
     const fenderMat = brickMaterial(0x2b2f3a, { roughness: 0.6 });
+    const wheelPositions: THREE.Vector3[] = [];
     const addWheelPair = (wz: number) => {
       for (const sx of [-1, 1]) {
         const wheel = new THREE.Mesh(wheelGeo, wheelMat);
@@ -206,6 +222,7 @@ export class GroundVehicle implements Selectable {
         wheel.position.set(sx * (w / 2 - 0.05), 0.16, wz);
         this.object.add(wheel);
         this.wheels.push(wheel);
+        wheelPositions.push(wheel.position.clone());
 
         const fender = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.24), fenderMat);
         fender.position.set(sx * (w / 2 - 0.05), 0.27, wz);
@@ -215,7 +232,29 @@ export class GroundVehicle implements Selectable {
     addWheelPair(l / 2 - 0.3);
     addWheelPair(-(l / 2 - 0.3));
 
-    // Role-specific detail (spec §16), on top of the shared body/cab/wheels.
+    // Separate lighter hub/rim disc inset into each dark wheel (V3.0 PHASE 2
+    // §2's common "휠 림 분리" requirement across all 4 vehicle types) — one
+    // InstancedMesh for every rim on this vehicle instead of one Mesh each.
+    const rimGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.17, 10);
+    const rimMat = brickMaterial(0xaeb4b9, { roughness: 0.35, metalness: 0.5 });
+    const rims = new THREE.InstancedMesh(rimGeo, rimMat, wheelPositions.length);
+    const rimDummy = new THREE.Object3D();
+    rimDummy.rotation.z = Math.PI / 2;
+    wheelPositions.forEach((p, i) => {
+      rimDummy.position.copy(p);
+      rimDummy.updateMatrix();
+      rims.setMatrixAt(i, rimDummy.matrix);
+    });
+    rims.instanceMatrix.needsUpdate = true;
+    this.object.add(rims);
+
+    // Role-specific detail (spec §16, extended V3.0 PHASE 2 §2), on top of
+    // the shared body/cab/wheels. SERVICE_VEHICLE (already documented above
+    // as the "heavy low tug" read) gets the pushback towbar; CLEANING_VEHICLE
+    // (already the closest thing to a van body among the 4) gets roof vents
+    // on top of its existing side-window glass, moving it toward the
+    // reference's "에이프런 셔틀" massing without relabeling what it actually
+    // does (its GameState type/operation/HUD label all stay CLEANING).
     const detailMat = brickMaterial(COLORS.terminalDark, { roughness: 0.5, metalness: 0.2 });
     if (type === "FUEL_TRUCK") {
       // Hose reel + nozzle at the rear.
@@ -231,6 +270,20 @@ export class GroundVehicle implements Selectable {
       const equipment = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.2, 0.3), detailMat);
       equipment.position.set(0, h + 0.12, -l / 4);
       this.object.add(equipment);
+
+      // Roof vents — a small InstancedMesh row, the "루프 환기구" the apron-
+      // shuttle-styled reference calls for.
+      const ventGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8);
+      const ventMat = brickMaterial(0xced3d6, { roughness: 0.4, metalness: 0.2 });
+      const vents = new THREE.InstancedMesh(ventGeo, ventMat, 2);
+      const ventDummy = new THREE.Object3D();
+      [-1, 1].forEach((sz, i) => {
+        ventDummy.position.set(0, h + 0.15, sz * l * 0.22);
+        ventDummy.updateMatrix();
+        vents.setMatrixAt(i, ventDummy.matrix);
+      });
+      vents.instanceMatrix.needsUpdate = true;
+      this.object.add(vents);
     } else if (type === "SERVICE_VEHICLE") {
       // Heavier, low-slung tow-tug read: a wide front bumper block plus a
       // toolbox, instead of just a roof box (spec: "낮고 묵직한 중장비 형태").
@@ -240,6 +293,20 @@ export class GroundVehicle implements Selectable {
       const toolbox = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.3, 0.4), detailMat);
       toolbox.position.set(0, h + 0.15, -l / 4);
       this.object.add(toolbox);
+
+      // Front + rear towbar (V3.0 PHASE 2 §2.2's "견인 바(Towbar) 결합부") —
+      // this is the vehicle the existing SERVICE_VEHICLE styling already
+      // describes as a pushback tug, so the towbar is what actually makes
+      // that read clearly instead of just a heavy silhouette.
+      const towbarMat = brickMaterial(0x2b2f3a, { roughness: 0.5, metalness: 0.3 });
+      for (const tz of [l / 2 + 0.32, -l / 2 - 0.32]) {
+        const towbar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.5), towbarMat);
+        towbar.position.set(0, 0.14, tz);
+        this.object.add(towbar);
+        const towbarHead = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), towbarMat);
+        towbarHead.position.set(0, 0.14, tz + Math.sign(tz) * 0.25);
+        this.object.add(towbarHead);
+      }
     }
   }
 
@@ -257,6 +324,8 @@ export class GroundVehicle implements Selectable {
         this.beaconClock += deltaTime;
         const phase = (this.beaconClock % 0.6) / 0.6;
         this.beaconMat.emissiveIntensity = phase < 0.5 ? 1 : 0.15;
+        // Spins only while actually moving, same guard as the blink itself.
+        if (this.beaconMount) this.beaconMount.rotation.y += deltaTime * 6;
       } else {
         this.beaconClock = 0;
         this.beaconMat.emissiveIntensity = 0.15;

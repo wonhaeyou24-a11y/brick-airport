@@ -39,14 +39,23 @@ const sharedGeo = {
   // solid-yellow round head is LEGO's single most recognizable proprietary
   // design cue, and this project's own rule is an original brick-toy look,
   // not a copy of it (spec §35/CLAUDE.md §1).
-  head: new THREE.SphereGeometry(0.2, 12, 9),
+  // V3.0 PHASE 2 §3.1 — enlarged from 0.2 toward a ~2.5-heads-tall "block
+  // toy figure" proportion, matching Staff.ts's same change, without
+  // shrinking the body/legs (which would move prop/hand offsets tuned
+  // against the old total height).
+  head: new THREE.SphereGeometry(0.24, 12, 9),
+  // Stud neck connector — the classic minifig head-to-torso joint (spec
+  // §3.1's "스터드 넥").
+  neck: new THREE.CylinderGeometry(0.09, 0.09, 0.07, 10),
   body: new THREE.BoxGeometry(0.42, 0.5, 0.28),
   limb: new THREE.BoxGeometry(0.12, 0.44, 0.12),
   bag: new THREE.BoxGeometry(0.24, 0.26, 0.18),
-  hair: new THREE.SphereGeometry(0.21, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.6),
-  hat: new THREE.CylinderGeometry(0.24, 0.24, 0.08, 12),
+  hair: new THREE.SphereGeometry(0.25, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.6),
+  hat: new THREE.CylinderGeometry(0.28, 0.28, 0.08, 12),
   suitcase: new THREE.BoxGeometry(0.16, 0.3, 0.22),
 };
+
+const neckMat = new THREE.MeshStandardMaterial({ color: 0xc98f66, roughness: 0.7 });
 
 /** Skin-tone variants, a second independent axis from BODY_COLORS/HAIR_COLORS. */
 const SKIN_TONES = [0xffcc99, 0xe0a878, 0x8d5a3c, 0xf5dcc0];
@@ -84,6 +93,8 @@ export class Passenger implements Selectable {
   private readonly tmpDir = new THREE.Vector3();
   private legL: THREE.Mesh | null = null;
   private legR: THREE.Mesh | null = null;
+  private armL: THREE.Mesh | null = null;
+  private armR: THREE.Mesh | null = null;
   private walkClock = 0;
   private walking = false;
 
@@ -121,8 +132,14 @@ export class Passenger implements Selectable {
     body.castShadow = true;
     this.object.add(body);
 
+    // Stud neck connector (spec §3.1) between the torso and the enlarged
+    // "chibi" head.
+    const neck = new THREE.Mesh(sharedGeo.neck, neckMat);
+    neck.position.y = 0.9;
+    this.object.add(neck);
+
     const head = new THREE.Mesh(sharedGeo.head, headMat);
-    head.position.y = 1.03;
+    head.position.y = 1.07;
     head.castShadow = true;
     this.object.add(head);
 
@@ -131,20 +148,22 @@ export class Passenger implements Selectable {
     // reads as a rounded hairstyle sitting on the rounded head.
     if (wearsHat) {
       const hat = new THREE.Mesh(sharedGeo.hat, hatMat);
-      hat.position.y = 1.23;
+      hat.position.y = 1.29;
       this.object.add(hat);
     } else {
       const hair = new THREE.Mesh(sharedGeo.hair, hairMat);
-      hair.position.y = 1.03;
+      hair.position.y = 1.07;
       this.object.add(hair);
     }
 
     const armL = new THREE.Mesh(sharedGeo.limb, bodyMat);
     armL.position.set(-0.29, 0.64, 0);
     this.object.add(armL);
+    this.armL = armL;
     const armR = new THREE.Mesh(sharedGeo.limb, bodyMat);
     armR.position.set(0.29, 0.64, 0);
     this.object.add(armR);
+    this.armR = armR;
 
     const legL = new THREE.Mesh(sharedGeo.limb, limbMat);
     legL.position.set(-0.12, 0.22, 0);
@@ -182,7 +201,11 @@ export class Passenger implements Selectable {
     }
   }
 
-  /** Simple walking leg-swing (spec §14/§23) — cosmetic only, never touches `data`. */
+  /**
+   * Walking leg-swing plus opposite-phase arm-swing (spec §3.3's "팔/다리가
+   * 전후로 교차 스윙") — cosmetic only, never touches `data`. Arms swing
+   * opposite their same-side leg, the natural cross-body walking gait.
+   */
   tickAnimation(deltaTime: number): void {
     if (!this.legL || !this.legR) return;
     if (this.walking) {
@@ -190,10 +213,14 @@ export class Passenger implements Selectable {
       const swing = Math.sin(this.walkClock * WALK_RATE * Math.PI * 2) * WALK_SWING;
       this.legL.rotation.x = swing;
       this.legR.rotation.x = -swing;
+      if (this.armL) this.armL.rotation.x = -swing;
+      if (this.armR) this.armR.rotation.x = swing;
     } else if (this.legL.rotation.x !== 0 || this.legR.rotation.x !== 0) {
       this.walkClock = 0;
       this.legL.rotation.x = 0;
       this.legR.rotation.x = 0;
+      if (this.armL) this.armL.rotation.x = 0;
+      if (this.armR) this.armR.rotation.x = 0;
     }
   }
 
@@ -216,6 +243,7 @@ function passengerLabel(id: string): string {
 export function disposePassengerResources(): void {
   for (const g of Object.values(sharedGeo)) g.dispose();
   for (const m of headMats) m.dispose();
+  neckMat.dispose();
   limbMat.dispose();
   bagMat.dispose();
   hatMat.dispose();
