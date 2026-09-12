@@ -341,11 +341,15 @@ body {
 
 .nav-item.is-active {
   background: var(--navy-700);
+  /* V3.0 PHASE 3 §2's "네온 하이라이트" — a soft cyan glow on the active
+     tile's own edge, on top of the existing gold icon/label recolor. */
+  box-shadow: inset 0 0 0 1px var(--accent-cyan), 0 0 10px rgba(0, 229, 255, 0.35);
 }
 
 .nav-item.is-active .nav-icon {
   background: var(--accent-yellow);
   color: var(--navy-900);
+  box-shadow: 0 0 8px rgba(255, 200, 0, 0.6);
 }
 
 .nav-item.is-active .nav-label {
@@ -551,6 +555,18 @@ body {
   font-size: 13px;
 }
 
+/* V3.0 PHASE 3 §3's "녹색 상태 인디케이터 점" — a small live/active dot
+   before the icon, on every card kind (a live GameState object is always
+   "active" by definition — spec §29 never shows a fake/placeholder card). */
+.ac-status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.7);
+}
+
 .ac-card-title {
   font-weight: 800;
   font-size: 13px;
@@ -591,32 +607,93 @@ body {
   opacity: 0.65;
 }
 
+/* V3.0 PHASE 3 §3 — up to 3 mini buttons per card (primary select/detail,
+   an optional "추적"/related-object jump, and an "정보" drawer shortcut),
+   replacing the single non-interactive "🖐 선택" label. The card itself is
+   still the fallback click target (buildCardFooter's primary button has no
+   data-action, so a click anywhere on the card — including that button —
+   falls through to the normal select behaviour in HUD's delegated
+   listener); only the related/info buttons need their own data-action to
+   branch to a different target. */
 .ac-card-footer {
   margin-top: 4px;
   padding-top: 8px;
   border-top: 1px solid var(--navy-line);
   display: flex;
+  gap: 4px;
 }
 
-.ac-card-select {
-  pointer-events: none; /* whole card is already the click target */
+.ac-btn {
+  pointer-events: auto;
   flex: 1;
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  color: var(--accent-cyan);
-  background: rgba(79, 195, 247, 0.12);
-  border: 1px solid rgba(79, 195, 247, 0.35);
+  font-family: var(--font);
+  color: var(--panel-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--navy-line);
   border-radius: 999px;
-  padding: 5px 0;
+  padding: 5px 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-btn:hover {
+  border-color: var(--accent-cyan);
+}
+
+.ac-btn-primary {
+  color: var(--accent-cyan);
+  background: rgba(0, 229, 255, 0.12);
+  border-color: rgba(0, 229, 255, 0.4);
+}
+
+.ac-btn-ghost {
+  color: var(--panel-text);
+  opacity: 0.75;
+}
+
+.ac-btn[aria-disabled="true"] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
 }
 
 /* --------------------------------------------------- zoom / utility --- */
 
-.zoom-cluster {
+/* V3.0 PHASE 3 §4 — the zoom cluster plus its small always-visible
+   "휠 스크롤로 확대/축소" caption, stacked as one dock so the caption
+   moves/hides together with the controls it describes. */
+.zoom-dock {
   position: absolute;
   right: var(--hud-gap);
   bottom: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.zoom-hint {
+  pointer-events: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--panel-text);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.zoom-cluster {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -713,34 +790,84 @@ body {
 
 /* --------------------------------------------------------- hud notice --- */
 
+/* V3.0 PHASE 3 §4 — moved from a top-center yellow banner to the
+   reference's bottom-right system-toast slot, tone-colored per
+   `HUD.showNotice()`'s `tone` (previously audio-only). Sits above the
+   zoom cluster so the two floating controls never overlap. */
 .hud-notice {
   position: absolute;
-  top: 74px;
-  left: 50%;
-  transform: translate(-50%, -8px);
+  right: var(--hud-gap);
+  bottom: 316px;
+  left: auto;
   pointer-events: none;
-  background: var(--brick-yellow);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
   color: var(--panel-text);
-  border: 3px solid var(--panel-border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
-  padding: 8px 16px;
-  font-size: 15px;
+  padding: 8px 16px 8px 14px;
+  font-size: 14px;
   font-weight: 800;
   /* Most notices are one short line; a level-up celebration (V1.6) uses a
      second line for what just unlocked — pre-line handles both without a
      second notice component. */
   white-space: pre-line;
-  max-width: min(90vw, 380px);
-  text-align: center;
+  max-width: min(85vw, 320px);
+  text-align: left;
   line-height: 1.4;
   opacity: 0;
+  transform: translateY(8px);
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .hud-notice.show {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
+}
+
+/* Small coloured status badge in front of the text — a checkmark for a
+   positive/"success" toast (spec's "녹색 체크 뱃지"), matching glyphs for
+   the other tones so every notice still reads as a distinct kind at a
+   glance without needing its own icon markup (textContent-only, no HTML
+   injection risk). */
+.hud-notice::before {
+  content: "●";
+  margin-right: 6px;
+  color: var(--accent-cyan);
+}
+
+.hud-notice[data-tone="success"] {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.25);
+}
+.hud-notice[data-tone="success"]::before {
+  content: "✓";
+  color: var(--accent-green);
+}
+
+.hud-notice[data-tone="warning"] {
+  border-color: var(--accent-yellow);
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.25);
+}
+.hud-notice[data-tone="warning"]::before {
+  content: "!";
+  color: var(--accent-yellow);
+}
+
+.hud-notice[data-tone="critical"] {
+  border-color: var(--brick-red);
+  box-shadow: 0 0 12px rgba(230, 57, 70, 0.3);
+}
+.hud-notice[data-tone="critical"]::before {
+  content: "✕";
+  color: var(--brick-red);
+}
+
+.hud-notice[data-tone="important"]::before {
+  content: "★";
+  color: var(--accent-yellow);
 }
 
 /* --------------------------------------------------- flight history --- */
@@ -1347,7 +1474,7 @@ body {
     max-width: 52vw;
   }
 
-  .zoom-cluster {
+  .zoom-dock {
     bottom: 240px;
   }
 

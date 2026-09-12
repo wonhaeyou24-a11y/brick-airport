@@ -208,6 +208,17 @@ export interface ActivityCard {
   /** 0-1, shown as a progress bar (V2.0 Phase G — ground-op turnaround %).
    * Omitted entirely for kinds that have no meaningful progress. */
   progress?: number;
+  /**
+   * V3.0 PHASE 3 §3 — a second, genuinely different object this card can
+   * jump to (a Gate's parked aircraft, a Staff member's assigned gate),
+   * rendered as its own labelled footer button. Reuses the exact same
+   * onActivityCardClick(kind, targetId) select path as the card's primary
+   * button — no new callback, no new selection mechanism. Omitted when no
+   * such related object currently exists (the button then renders disabled
+   * rather than being silently removed, so the card's footer layout stays
+   * stable frame to frame).
+   */
+  related?: { kind: ActivityKind; targetId: string; label: string };
 }
 
 export interface HudCallbacks {
@@ -416,11 +427,35 @@ export class HUD {
     this.must(".js-drawer-close").addEventListener("click", () => this.closeDrawer());
 
     // Event delegation for activity cards — same pattern as Action Center.
+    // V3.0 PHASE 3 §3 extends this to the card's own footer buttons: a
+    // secondary "related object" button (data-action="related") selects
+    // THAT object instead of the card's own; an "info" button
+    // (data-action="info") just opens this same category's drawer, a
+    // HUD-internal affordance that never needs to reach Game at all. A
+    // click anywhere else on the card (or its primary button) keeps the
+    // original select-this-card behaviour unchanged.
     this.activityCardsEl.addEventListener("click", (ev) => {
-      const card = (ev.target as HTMLElement).closest<HTMLElement>(".activity-card");
+      const target = ev.target as HTMLElement;
+      const card = target.closest<HTMLElement>(".activity-card");
       const idx = card ? Number(card.dataset.index) : NaN;
       const item = Number.isInteger(idx) ? this.activityCards[idx] : undefined;
-      if (item) callbacks.onActivityCardClick(item.kind, item.targetId);
+      if (!item) return;
+
+      const relatedBtn = target.closest<HTMLElement>('[data-action="related"]');
+      if (relatedBtn) {
+        if (relatedBtn.getAttribute("aria-disabled") === "true") return;
+        if (item.related) callbacks.onActivityCardClick(item.related.kind, item.related.targetId);
+        return;
+      }
+
+      const infoBtn = target.closest<HTMLElement>('[data-action="info"]');
+      if (infoBtn) {
+        const cat = infoBtn.dataset.infoCat as NavCategory | undefined;
+        if (cat) this.toggleDrawer(cat);
+        return;
+      }
+
+      callbacks.onActivityCardClick(item.kind, item.targetId);
     });
 
     this.must(".js-zoom-in").addEventListener("click", callbacks.onZoomIn);
@@ -539,6 +574,7 @@ export class HUD {
           `<div class="ac-card-image"><span>${escapeHtml(c.icon)}</span></div>` +
           `<div class="ac-card-body">` +
           `<div class="ac-card-head">` +
+          `<span class="ac-status-dot" aria-hidden="true"></span>` +
           `<span class="ac-card-icon">${escapeHtml(c.icon)}</span>` +
           `<span class="ac-card-title">${escapeHtml(c.title)}</span>` +
           `</div>` +
@@ -549,7 +585,7 @@ export class HUD {
                 clamp01(c.progress) * 100,
               )}%"></i></div>`
             : "") +
-          `<div class="ac-card-footer"><span class="ac-card-select">🖐 선택</span></div>` +
+          buildCardFooter(c) +
           `</div>` +
           `</div>`,
       )
@@ -658,7 +694,18 @@ export class HUD {
     this.noticePriority = priority;
     this.noticeGuardUntil = now + ms;
 
+    const defaultTone: NoticeTone =
+      priority === 1 ? "important" : priority === 2 ? "warning" : "info";
+    const resolvedTone = tone ?? defaultTone;
+
+    // V3.0 PHASE 3 §4 — the "우측 하단 시스템 알림 토스트 (녹색 체크 뱃지)"
+    // is this same existing notice element, now tone-colored and carrying a
+    // small badge icon instead of always rendering as a plain yellow banner
+    // (`tone` previously only ever picked the audio cue, never the visual
+    // style). No new notice component, no new call sites — every existing
+    // showNotice() caller across Game.ts gets this for free.
     this.noticeEl.textContent = text;
+    this.noticeEl.dataset.tone = resolvedTone;
     this.noticeEl.hidden = false;
     // Force reflow so the fade-in transition restarts even on a rapid re-show.
     void this.noticeEl.offsetWidth;
@@ -673,9 +720,7 @@ export class HUD {
       }, 300);
     }, ms);
 
-    const defaultTone: NoticeTone =
-      priority === 1 ? "important" : priority === 2 ? "warning" : "info";
-    this.audio.playNotice(tone ?? defaultTone);
+    this.audio.playNotice(resolvedTone);
     return true;
   }
 
@@ -954,6 +999,79 @@ export class HUD {
   }
 }
 
+/**
+ * V3.0 PHASE 3 §3 — per-kind footer button config: the card's primary-button
+ * label (always does the existing select action), which drawer category its
+ * "정보"/"상세보기" info button opens, and whether it also gets a second
+ * "추적" button (aircraft only — selecting an aircraft already makes the
+ * camera follow it, per Game.onSelectionChange(), so this button performs
+ * the exact same select action under a label that describes what it does).
+ */
+const CARD_FOOTER_CONFIG: Record<
+  ActivityKind,
+  {
+    primaryLabel: string;
+    infoLabel: string;
+    infoCat: NavCategory;
+    showTrack: boolean;
+    /** Fallback button label when this kind has a `related` concept
+     * (Gate -> parked aircraft, Staff -> assigned gate) but the card's
+     * current `related` value is unset — kept visible and disabled instead
+     * of removed, so the footer's button count never jumps frame to frame. */
+    relatedFallback?: string;
+  }
+> = {
+  AIRCRAFT: { primaryLabel: "선택", infoLabel: "정보", infoCat: "flights", showTrack: true },
+  GATE: {
+    primaryLabel: "상세보기",
+    infoLabel: "정보",
+    infoCat: "facility",
+    showTrack: false,
+    relatedFallback: "연결 항공기",
+  },
+  GROUND_OP: { primaryLabel: "상세보기", infoLabel: "정보", infoCat: "flights", showTrack: false },
+  STAFF: {
+    primaryLabel: "상세보기",
+    infoLabel: "정보",
+    infoCat: "staff",
+    showTrack: false,
+    relatedFallback: "담당 구역",
+  },
+  PASSENGER: { primaryLabel: "상세보기", infoLabel: "정보", infoCat: "passengers", showTrack: false },
+  VEHICLE: { primaryLabel: "상세보기", infoLabel: "정보", infoCat: "facility", showTrack: false },
+};
+
+/**
+ * Renders an activity card's footer: the primary select button, an optional
+ * "추적" duplicate for aircraft, an optional labelled button to the card's
+ * `related` object (e.g. a Gate's parked aircraft — disabled when the kind
+ * supports one but none currently exists), and an "정보" button that opens
+ * the matching drawer category. Every button is a real, already-existing
+ * action (select or open-drawer) — no new callback surface.
+ */
+function buildCardFooter(c: ActivityCard): string {
+  const cfg = CARD_FOOTER_CONFIG[c.kind];
+  const buttons: string[] = [
+    `<button class="ac-btn ac-btn-primary" type="button">🖐 ${escapeHtml(cfg.primaryLabel)}</button>`,
+  ];
+  if (cfg.showTrack) {
+    buttons.push(`<button class="ac-btn" type="button">📍 추적</button>`);
+  }
+  if (c.related) {
+    buttons.push(
+      `<button class="ac-btn" type="button" data-action="related">${escapeHtml(c.related.label)}</button>`,
+    );
+  } else if (cfg.relatedFallback) {
+    buttons.push(
+      `<button class="ac-btn" type="button" data-action="related" aria-disabled="true">${escapeHtml(cfg.relatedFallback)}</button>`,
+    );
+  }
+  buttons.push(
+    `<button class="ac-btn ac-btn-ghost" type="button" data-action="info" data-info-cat="${cfg.infoCat}">${escapeHtml(cfg.infoLabel)}</button>`,
+  );
+  return `<div class="ac-card-footer">${buttons.join("")}</div>`;
+}
+
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return n < 0 ? 0 : n > 1 ? 1 : n;
@@ -1134,10 +1252,13 @@ function buildTemplate(): string {
     <button class="util-btn js-reset" title="${t("reset")}">↺</button>
   </div>
 
-  <div class="zoom-cluster">
-    <button class="zoom-btn js-zoom-out" title="Zoom out">−</button>
-    <span class="zoom-icon">🔍</span>
-    <button class="zoom-btn js-zoom-in" title="Zoom in">+</button>
+  <div class="zoom-dock">
+    <span class="zoom-hint">휠 스크롤로 확대/축소</span>
+    <div class="zoom-cluster">
+      <button class="zoom-btn js-zoom-out" title="축소">−</button>
+      <span class="zoom-icon">🔍</span>
+      <button class="zoom-btn js-zoom-in" title="확대">+</button>
+    </div>
   </div>
 
   <div class="info-slot">

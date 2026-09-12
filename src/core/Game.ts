@@ -1847,6 +1847,12 @@ export class Game {
         title: gateName(gate.id),
         subtitle: stateLabel(gate.status),
         lines: [gate.aircraftId ? stateLabel("OCCUPIED") : stateLabel("AVAILABLE")],
+        // V3.0 PHASE 3 §3's "연결 항공기" button — the aircraft actually
+        // parked at this gate right now, if any (same field the 3D gate
+        // beacon/status already reads; not a new relation).
+        related: gate.aircraftId
+          ? { kind: "AIRCRAFT", targetId: gate.aircraftId, label: "연결 항공기" }
+          : undefined,
       });
     }
 
@@ -1872,6 +1878,12 @@ export class Game {
       s.data.staff.find((x) => x.state !== "IDLE") ?? s.data.staff[0];
     if (staff) {
       const staffOp = staff.operationId ? s.getGroundOperation(staff.operationId) : undefined;
+      // V3.0 PHASE 3 §3's "담당 구역" button — the gate their current
+      // operation is at, resolved to the Building id Selection needs (same
+      // resolution the GATE card above already does for gate.buildingId).
+      const staffGateBuilding = staffOp
+        ? s.data.gates.find((gt) => gt.id === staffOp.gateId)?.buildingId
+        : undefined;
       cards.push({
         kind: "STAFF",
         targetId: staff.id,
@@ -1879,6 +1891,9 @@ export class Game {
         title: staffRoleLabel(staff.role),
         subtitle: stateLabel(staff.state),
         lines: [staffOp ? opLabel(staffOp.type) : "—"],
+        related: staffGateBuilding
+          ? { kind: "GATE", targetId: staffGateBuilding, label: "담당 구역" }
+          : undefined,
       });
     }
 
@@ -1902,7 +1917,7 @@ export class Game {
         (c) =>
           `${c.kind}:${c.targetId}:${c.subtitle}:${c.lines.join(",")}:${
             c.progress != null ? Math.round(c.progress * 20) : ""
-          }`,
+          }:${c.related ? `${c.related.kind}:${c.related.targetId}` : ""}`,
       )
       .join("|");
     if (sig === this.shownActivityCardsSig) return;
