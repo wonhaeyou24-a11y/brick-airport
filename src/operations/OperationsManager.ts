@@ -29,6 +29,8 @@ export interface OperationsTick {
  *   - a SERVICE_BONUS toggles      → service score + satisfaction (event lift)
  *
  * No Three.js. Reads / writes GameState.operations + airport.reputation only.
+ * (Economy.settleBoarding() also READS airport.reputation as a small ticket-
+ * revenue bonus — V2.2 balance pass, so this drift has a real payoff.)
  */
 export class OperationsManager {
   private readonly events = new AirportEventManager();

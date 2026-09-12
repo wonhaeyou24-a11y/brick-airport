@@ -14,7 +14,7 @@ export interface StaffRoleConfig {
   operation: GroundOperationType;
   /** Base skill for a fresh hire (0–100). */
   skill: number;
-  /** Wage — data only in V0.9 (spec §B.4). */
+  /** Wage — charged periodically via Economy.paySalaries() (V2.2). */
   salary: number;
   /** One-off cost to hire another of this role (spec §B.3). */
   hiringCost: number;

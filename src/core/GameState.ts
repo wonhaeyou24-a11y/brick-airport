@@ -246,7 +246,7 @@ export interface StaffData {
   skill: number;
   /** Epoch ms the staff member was hired. */
   hiredAt: number;
-  /** Wage — data only in V0.9, for a future operating-cost system (spec §B.4). */
+  /** Wage — charged periodically by Economy.paySalaries() (V2.2 balance pass). */
   salary: number;
   /** Staff-room slot they return to when idle. */
   homePosition: Vec3;

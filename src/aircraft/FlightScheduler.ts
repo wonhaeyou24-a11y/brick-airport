@@ -110,11 +110,14 @@ export class FlightScheduler {
   /**
    * Concurrent-aircraft ceiling: the config value, but never below the gate
    * count so building gates lets the airport run more flights (spec §24).
+   * V2.2 — also never below the runway-derived cap, so RUNWAY (previously
+   * read nowhere) genuinely raises capacity too.
    */
   private get effectiveCap(): number {
     return Math.max(
       FLIGHT_CONFIG.maxActiveAircraft,
       this.state.data.gates.length,
+      this.state.countBuildingsByType("RUNWAY") * FLIGHT_CONFIG.aircraftPerRunway,
     );
   }
 

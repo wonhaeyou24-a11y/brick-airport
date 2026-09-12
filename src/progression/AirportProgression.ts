@@ -16,16 +16,20 @@ export interface LevelRequirement {
 
 export const LEVEL_REQUIREMENTS: readonly LevelRequirement[] = [
   { level: 1, minFlights: 0, minPassengers: 0 },
+  // Lv.2 kept fast and easy on purpose — the EARLY GAME's first, quick
+  // reward for learning the airport loop (V2.2 §9's target experience).
   { level: 2, minFlights: 5, minPassengers: 20 },
-  { level: 3, minFlights: 15, minPassengers: 60 },
-  // V2.1 content expansion — continues the same escalating OR-threshold
-  // pattern (each roughly 2x the prior tier), giving a reason to keep
-  // playing past the old Lv.3 ceiling. Expansion.ts's grid stays capped at
-  // its existing max tier (world/cells.ts's hard 40-cell ceiling) — these
-  // levels unlock new BUILDING/FACILITY/route content instead (BuildingConfig,
-  // FlightConfig), not more buildable area.
-  { level: 4, minFlights: 30, minPassengers: 120 },
-  { level: 5, minFlights: 50, minPassengers: 200 },
+  // V2.2 balance pass — a 600s idle-only simulation (no construction, no
+  // hiring beyond the starting roster) reached every tier including the
+  // former Lv.3-Lv.5 ceiling in under 9 minutes, leaving no room for a
+  // mid/late game (spec §9's explicit "progression too fast" check).
+  // Stretched ~1.5x/1.8x/2.3x the V2.1 values so reaching the true endgame
+  // tier through natural play takes on the order of 15-20+ minutes instead
+  // of under 9. The OR condition and escalating shape are unchanged — only
+  // the numbers moved.
+  { level: 3, minFlights: 22, minPassengers: 90 },
+  { level: 4, minFlights: 48, minPassengers: 220 },
+  { level: 5, minFlights: 100, minPassengers: 460 },
 ];
 
 /** Player-facing tier name per level (V2.1 §3) — used only in the existing

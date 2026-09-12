@@ -13,13 +13,24 @@ export const FLIGHT_CONFIG = {
   /** Seconds between flight requests after that. */
   spawnInterval: 30,
   /**
-   * Hard ceiling on concurrent aircraft. The effective cap is the smaller of
-   * this and the current gate count, so the airport never has more planes than
-   * it can park — and it grows automatically when the player builds gates.
+   * Floor on concurrent aircraft, not a ceiling: FlightScheduler.effectiveCap
+   * is the LARGEST of this, the gate count, and the runway-derived cap below,
+   * so building gates or runways always raises capacity, never lowers it.
    */
   maxActiveAircraft: 4,
   /** Most flight requests that may wait for a free gate at once. */
   maxPendingFlights: 3,
+  /**
+   * V2.2 balance pass — RUNWAY cost 8,000 (the 2nd-priciest building) and its
+   * BuildMenu description already promised "increases takeoff/landing
+   * capacity," but nothing read the runway count anywhere: a building whose
+   * entire benefit was fake (audit's "buildings with no meaningful benefit").
+   * Concurrent-aircraft capacity contributed per RUNWAY built, the same
+   * Math.max-floor pattern gates already use in effectiveCap. 4 keeps the
+   * airport's starting runway a no-op (matches the maxActiveAircraft floor),
+   * so only a genuinely-built extra runway raises the ceiling.
+   */
+  aircraftPerRunway: 4,
   /** Default capacity for a scheduled arrival. */
   defaultCapacity: 6,
   /** Where a new arrival appears (out past the approach, airborne). */

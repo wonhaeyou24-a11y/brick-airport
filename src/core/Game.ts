@@ -1236,6 +1236,11 @@ export class Game {
     const revenue = this.economy.settleBoarding();
     if (revenue > 0) this.hud.showRevenue(revenue);
 
+    // V2.2 balance pass — periodic staff payday (StaffData.salary existed
+    // since V0.9 but was never actually deducted).
+    const salaryPaid = this.economy.paySalaries(deltaTime);
+    if (salaryPaid > 0) this.hud.showSpend(salaryPaid);
+
     // Operations: tick events, surface notices, honour surge flight requests.
     const opsTick = this.operations.update(deltaTime);
     for (const notice of opsTick.notices) this.hud.showNotice(notice, 2600, 3);
